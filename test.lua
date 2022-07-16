@@ -4,9 +4,8 @@ GLOBAL.setfenv(1, GLOBAL)
 local latest_remove_slot = nil
 local latest_get_slot = nil
 
-local function debug_remove_get()
-    print(latest_remove_slot)
-    print(latest_get_slot)
+local function debug_print(_, ...)
+    print(...)
 end
 
 local function ModOnEquip(inst, data)
@@ -14,7 +13,7 @@ local function ModOnEquip(inst, data)
         local item = data.item
         print("ModOnEquip data.item:", item)
     end
-    inst:DoTaskInTime(0, debug_remove_get)
+    inst:DoTaskInTime(1, debug_print, latest_remove_slot, latest_get_slot)
     --if equipslots slot is taken then record item on slot
     --equipslots slot = equipped item
     --if mod latest remove slot == nil or mod latest give slot == nil then return end
@@ -29,12 +28,16 @@ local function ModOnUnequip(_, data)
     --remove item from equipslots
 end
 
-local function ModOnItemGet(_, data)
+local function ModOnItemGet(inst, data)
     --record to mod latest get slot
     local get_slot = data.slot
     local item = data.item
-    latest_get_slot = get_slot
-    print("ModOnItemGet data:", data.item, get_slot)
+    local function latest_update(_, get_slot)
+        latest_get_slot = get_slot
+    end
+    latest_update(inst, get_slot)
+    --inst:DoTaskInTime(0, latest_update, get_slot)
+    print("ModOnItemGet data:", item, get_slot)
 end
 
 local function ModOnItemLose(_, data)
