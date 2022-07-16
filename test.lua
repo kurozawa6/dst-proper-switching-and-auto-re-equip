@@ -4,6 +4,10 @@ GLOBAL.setfenv(1, GLOBAL)
 local latest_remove_slot = nil
 local latest_get_slot = nil
 
+local function delay_again(inst, fn)
+    inst:DoTaskInTime(0, fn)
+end
+
 local function ModOnEquip(inst, data)
     if type(data) == "table" and data.eslot and data.item then
         local item = data.item
@@ -12,10 +16,7 @@ local function ModOnEquip(inst, data)
     local function debug_print(_)
         print(latest_remove_slot, latest_get_slot)
     end
-    local function delay_twice_debug_print(_)
-        _:DoTaskInTime(0, debug_print)
-    end
-    inst:DoTaskInTime(0, delay_twice_debug_print)
+    inst:DoTaskInTime(0, delay_again, debug_print)
     --if equipslots slot is taken then record item on slot
     --equipslots slot = equipped item
     --if mod latest remove slot == nil or mod latest give slot == nil then return end
@@ -41,7 +42,7 @@ local function ModOnItemGet(inst, data)
     print("ModOnItemGet data:", item, get_slot)
 end
 
-local function ModOnItemLose(_, data)
+local function ModOnItemLose(_, data) -- IMPORTANT EVENT FUNCTION THAT IS CALLED ONLY WHEN NEEDED! USE THIS! use separate remove_slot for every equipslot, terminate when item has no equipslot
     local remove_slot = data.slot
     latest_remove_slot = remove_slot
     print("ModOnItemLose data.slot:", remove_slot)
