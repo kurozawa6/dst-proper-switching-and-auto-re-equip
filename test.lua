@@ -12,7 +12,10 @@ local function ModOnEquip(inst, data)
     local function debug_print(_)
         print(latest_remove_slot, latest_get_slot)
     end
-    inst:DoTaskInTime(0, debug_print)
+    local function delay_twice_debug_print(_)
+        _:DoTaskInTime(0, debug_print)
+    end
+    inst:DoTaskInTime(0, delay_twice_debug_print)
     --if equipslots slot is taken then record item on slot
     --equipslots slot = equipped item
     --if mod latest remove slot == nil or mod latest give slot == nil then return end
