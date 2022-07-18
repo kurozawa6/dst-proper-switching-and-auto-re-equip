@@ -4,23 +4,7 @@ GLOBAL.setfenv(1, GLOBAL)
 local latest_equip_items = {}
 local latest_get_items = {}
 local latest_get_slots = {}
---local latest_remove_slot = nil
---local saved_eslot = nil
---local saved_remove_slots = {}
-local equipment_switched = {}
 local saved_inventory = nil
-
-local function load_whole_inventory(inst)
-    local inventory = inst.replica.inventory
-    if inventory == nil then return nil end
-    local numslots = inventory:GetNumSlots()
-    local output_saved_inventory = {}
-    for slot=1, numslots do
-        output_saved_inventory[slot] = inventory:GetItemInSlot(slot)
-        --print(slot, inst.replica.inventory:GetItemInSlot(slot))
-    end
-    return output_saved_inventory
-end
 
 local function delay_again(inst, fn)
     inst:DoTaskInTime(0, fn)
@@ -43,18 +27,8 @@ local function ModOnEquip(inst, data)
     if not (type(data) == "table" and data.eslot and data.item) then return end
     local item = data.item
     local eslot = data.eslot
-    local previous_equipped_item = nil
-    if latest_equip_items[eslot] then
-        previous_equipped_item = latest_equip_items[eslot]
-    end
+    latest_equip_items[eslot] = item
     --print("ModOnEquip data.item:", item)
-    local function update_equipped_item(_)
-        latest_equip_items[eslot] = item
-        if previous_equipped_item and latest_get_items[eslot] and previous_equipped_item == latest_get_items[eslot] then
-            equipment_switched[eslot] = true
-        end
-    end
-    inst:DoTaskInTime(0, update_equipped_item)
     -- initial rough idea, deletable:
     --if mod latest remove slot == nil or mod latest give slot == nil then return end
     --if mod latest remove slot == mod latest give slot then return end
@@ -87,20 +61,15 @@ local function ModOnItemLose(inst, data) -- IMPORTANT EVENT FUNCTION THAT IS CAL
     local eslot = nil
     if saved_inventory ~= nil then
         for _, item in pairs(current_equips) do
-            print(item, saved_inventory[removed_slot])
+            --print(item, saved_inventory[removed_slot])
             if item == saved_inventory[removed_slot] then
                 equipped_item = item
                 eslot = equipped_item.replica.equippable:EquipSlot()
-                saved_inventory[removed_slot] = nil
-                --eslot = item.replica.equippable:EquipSlot()
-                --print("ITEM FOUND!", item, eslot)
                 break
             end
         end
     end
-    if equipped_item == nil then
-        saved_inventory = load_whole_inventory(inst)
-    end
+    saved_inventory[removed_slot] = nil
     if eslot == nil then return end
     local previous_equipped_item = latest_equip_items[eslot]
     latest_equip_items[eslot] = equipped_item
@@ -115,13 +84,18 @@ local function ModOnItemLose(inst, data) -- IMPORTANT EVENT FUNCTION THAT IS CAL
         end
     end
     inst:DoTaskInTime(0, main_auto_switch)
-    local function old_main_auto_switch()
-        if equipment_switched[eslot] == true then
-            equipment_switched[eslot] = false
-            print("Move", item_to_move, "from", slot_taken_from, "to", removed_slot) -- TO IMPLEMENT ACTUAL FUNCTION
-        end
+end
+
+local function load_whole_inventory(inst)
+    local inventory = inst.replica.inventory
+    if inventory == nil then return nil end
+    local numslots = inventory:GetNumSlots()
+    local output_saved_inventory = {}
+    for slot=1, numslots do
+        output_saved_inventory[slot] = inventory:GetItemInSlot(slot)
+        --print(slot, inst.replica.inventory:GetItemInSlot(slot))
     end
-    --inst:DoTaskInTime(0, delay_again, old_main_auto_switch)
+    return output_saved_inventory
 end
 
 ENV.AddComponentPostInit("playercontroller", function(self)
