@@ -83,7 +83,7 @@ local function ModOnItemLose(inst, data) -- IMPORTANT EVENT FUNCTION THAT IS CAL
     local function main_auto_switch(_)
         item_to_move = latest_get_items[eslot]
         slot_taken_from = latest_get_slots[eslot]
-        print("ModOnItemLose Variables:", item_to_move, removed_slot, eslot, "Finished Saving Shared Mod Variables")
+        print("ModOnItemLose Variables:", equipped_item, removed_slot, eslot, "Finished Saving Shared Mod Variables")
         if previous_equipped_item == item_to_move and previous_equipped_item and item_to_move then
             print("Move", item_to_move, "from", slot_taken_from, "to", removed_slot) -- TO IMPLEMENT ACTUAL FUNCTION
         end
