@@ -27,7 +27,10 @@ local function ModOnEquip(inst, data)
     if not (type(data) == "table" and data.eslot and data.item) then return end
     local item = data.item
     local eslot = data.eslot
-    latest_equip_items[eslot] = item
+    local function update_latest_equip_fn_to_delay(_)
+        latest_equip_items[eslot] = item
+    end
+    inst:DoTaskInTime(0, update_latest_equip_fn_to_delay)
     --print("ModOnEquip data.item:", item)
     -- initial rough idea, deletable:
     --if mod latest remove slot == nil or mod latest give slot == nil then return end
@@ -41,7 +44,7 @@ local function ModOnUnequip(_, data)
     latest_equip_items[eslot] = nil
 end
 
-local function ModOnItemGet(inst, data)
+local function ModOnItemGet(_, data)
     --record to mod latest get slot
     local item = data.item
     if item.replica.equippable == nil then return end
