@@ -4,7 +4,7 @@ GLOBAL.setfenv(1, GLOBAL)
 local latest_equip_items = {}
 local latest_get_items = {}
 local latest_get_slots = {}
-local saved_inventory = nil
+local saved_inventory = {}
 
 local function delay_again(inst, fn)
     inst:DoTaskInTime(0, fn)
@@ -91,7 +91,7 @@ end
 
 local function load_whole_inventory(inst)
     local inventory = inst.replica.inventory
-    if inventory == nil then return nil end
+    if inventory == nil then return {} end
     local numslots = inventory:GetNumSlots()
     local output_saved_inventory = {}
     for slot=1, numslots do
