@@ -10,7 +10,7 @@ local latest_get_slots = {}
 local equipment_switched = {}
 local saved_inventory = nil
 
-local function save_inventory(inst)
+local function load_whole_inventory(inst)
     local inventory = inst.replica.inventory
     if inventory == nil then return nil end
     local numslots = inventory:GetNumSlots()
@@ -43,14 +43,14 @@ local function ModOnEquip(inst, data)
     if not (type(data) == "table" and data.eslot and data.item) then return end
     local item = data.item
     local eslot = data.eslot
-    local equip_item_to_replace = nil
+    local previous_equipped_item = nil
     if latest_equip_items[eslot] then
-        equip_item_to_replace = latest_equip_items[eslot]
+        previous_equipped_item = latest_equip_items[eslot]
     end
-    latest_equip_items[eslot] = item
     --print("ModOnEquip data.item:", item)
     local function update_equipped_item(_)
-        if equip_item_to_replace and latest_get_items[eslot] and equip_item_to_replace == latest_get_items[eslot] then
+        latest_equip_items[eslot] = item
+        if previous_equipped_item and latest_get_items[eslot] and previous_equipped_item == latest_get_items[eslot] then
             equipment_switched[eslot] = true
         end
     end
@@ -75,53 +75,59 @@ local function ModOnItemGet(inst, data)
     local get_slot = data.slot
     latest_get_items[eslot] = item
     latest_get_slots[eslot] = get_slot
-    local function update_shared_inventory(_)
-        saved_inventory = save_inventory(inst)
-        print("ModOnItemGet data:", item, get_slot, eslot, "Finished Updating Shared Mod Variables")
-    end
-    inst:DoTaskInTime(0, update_shared_inventory)
+    saved_inventory[get_slot] = item
+    print("ModOnItemGet data:", item, get_slot, eslot, "Finished Updating Saved Inventory")
 end
 
 local function ModOnItemLose(inst, data) -- IMPORTANT EVENT FUNCTION THAT IS CALLED ONLY WHEN NEEDED! USE THIS! use separate removed_slot for every equipslot?, terminate when item has no equipslot?
     local current_equips = inst.replica.inventory:GetEquips()
     --print_data(current_equips)
     local removed_slot = data.slot
-    --local item_equipped = nil
+    local equipped_item = nil
     local eslot = nil
     if saved_inventory ~= nil then
         for _, item in pairs(current_equips) do
             print(item, saved_inventory[removed_slot])
             if item == saved_inventory[removed_slot] then
-                eslot = item.replica.equippable:EquipSlot()
+                equipped_item = item
+                eslot = equipped_item.replica.equippable:EquipSlot()
+                saved_inventory[removed_slot] = nil
+                --eslot = item.replica.equippable:EquipSlot()
                 --print("ITEM FOUND!", item, eslot)
                 break
             end
         end
     end
-    saved_inventory = save_inventory(inst)
+    if equipped_item == nil then
+        saved_inventory = load_whole_inventory(inst)
+    end
     if eslot == nil then return end
-    --saved_remove_slots[eslot] = removed_slot
+    local previous_equipped_item = latest_equip_items[eslot]
+    latest_equip_items[eslot] = equipped_item
     local item_to_move = nil
     local slot_taken_from = nil
-    local function update_variables_to_use(_)
+    local function main_auto_switch(_)
         item_to_move = latest_get_items[eslot]
         slot_taken_from = latest_get_slots[eslot]
         print("ModOnItemLose Variables:", item_to_move, removed_slot, eslot, "Finished Saving Shared Mod Variables")
+        if previous_equipped_item == item_to_move and previous_equipped_item and item_to_move then
+            print("Move", item_to_move, "from", slot_taken_from, "to", removed_slot) -- TO IMPLEMENT ACTUAL FUNCTION
+        end
     end
-    inst:DoTaskInTime(0, update_variables_to_use)
-    local function main_auto_switch()
+    inst:DoTaskInTime(0, main_auto_switch)
+    local function old_main_auto_switch()
         if equipment_switched[eslot] == true then
             equipment_switched[eslot] = false
             print("Move", item_to_move, "from", slot_taken_from, "to", removed_slot) -- TO IMPLEMENT ACTUAL FUNCTION
         end
     end
-    inst:DoTaskInTime(0, delay_again, main_auto_switch)
+    --inst:DoTaskInTime(0, delay_again, old_main_auto_switch)
 end
 
 ENV.AddComponentPostInit("playercontroller", function(self)
     if self.inst ~= ThePlayer then return end
     local function initialize_inventory_and_equips(inst)
-        saved_inventory = save_inventory(inst)
+        saved_inventory = load_whole_inventory(inst)
         latest_equip_items = inst.replica.inventory:GetEquips()
         print_data(saved_inventory)
         print_data(latest_equip_items)
