@@ -75,8 +75,11 @@ local function ModOnItemGet(inst, data)
     local get_slot = data.slot
     latest_get_items[eslot] = item
     latest_get_slots[eslot] = get_slot
-    saved_inventory = save_inventory(inst)
-    print("ModOnItemGet data:", item, get_slot, eslot, "Finished Updating Shared Mod Variables")
+    local function update_shared_inventory(_)
+        saved_inventory = save_inventory(inst)
+        print("ModOnItemGet data:", item, get_slot, eslot, "Finished Updating Shared Mod Variables")
+    end
+    inst:DoTaskInTime(0, update_shared_inventory)
 end
 
 local function ModOnItemLose(inst, data) -- IMPORTANT EVENT FUNCTION THAT IS CALLED ONLY WHEN NEEDED! USE THIS! use separate removed_slot for every equipslot?, terminate when item has no equipslot?
@@ -90,7 +93,7 @@ local function ModOnItemLose(inst, data) -- IMPORTANT EVENT FUNCTION THAT IS CAL
             print(item, saved_inventory[removed_slot])
             if item == saved_inventory[removed_slot] then
                 eslot = item.replica.equippable:EquipSlot()
-                print("ITEM FOUND!", item, eslot)
+                --print("ITEM FOUND!", item, eslot)
                 break
             end
         end
@@ -117,7 +120,14 @@ end
 
 ENV.AddComponentPostInit("playercontroller", function(self)
     if self.inst ~= ThePlayer then return end
-    saved_inventory = save_inventory(self.inst)
+    local function initialize_inventory_and_equips(inst)
+        saved_inventory = save_inventory(inst)
+        latest_equip_items = inst.replica.inventory:GetEquips()
+        print_data(saved_inventory)
+        print_data(latest_equip_items)
+    end
+    self.inst:DoTaskInTime(0, initialize_inventory_and_equips)
+
     self.inst:ListenForEvent("equip", ModOnEquip)
     self.inst:ListenForEvent("unequip", ModOnUnequip)
     self.inst:ListenForEvent("itemget", ModOnItemGet)
