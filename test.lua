@@ -62,14 +62,12 @@ local function ModOnItemLose(inst, data) -- IMPORTANT EVENT FUNCTION THAT IS CAL
     local removed_slot = data.slot
     local equipped_item = nil
     local eslot = nil
-    if saved_inventory ~= nil then
-        for _, item in pairs(current_equips) do
-            --print(item, saved_inventory[removed_slot])
-            if item == saved_inventory[removed_slot] then
-                equipped_item = item
-                eslot = equipped_item.replica.equippable:EquipSlot()
-                break
-            end
+    for _, item in pairs(current_equips) do
+        --print(item, saved_inventory[removed_slot])
+        if item == saved_inventory[removed_slot] then
+            equipped_item = item
+            eslot = equipped_item.replica.equippable:EquipSlot()
+            break
         end
     end
     saved_inventory[removed_slot] = nil
@@ -93,12 +91,12 @@ local function load_whole_inventory(inst)
     local inventory = inst.replica.inventory
     if inventory == nil then return {} end
     local numslots = inventory:GetNumSlots()
-    local output_saved_inventory = {}
+    local whole_inventory = {}
     for slot=1, numslots do
-        output_saved_inventory[slot] = inventory:GetItemInSlot(slot)
+        whole_inventory[slot] = inventory:GetItemInSlot(slot)
         --print(slot, inst.replica.inventory:GetItemInSlot(slot))
     end
-    return output_saved_inventory
+    return whole_inventory
 end
 
 ENV.AddComponentPostInit("playercontroller", function(self)
