@@ -47,12 +47,14 @@ end
 local function ModOnItemGet(_, data)
     --record to mod latest get slot
     local item = data.item
-    if item.replica.equippable == nil then return end
-    local eslot = item.replica.equippable:EquipSlot()
     local get_slot = data.slot
+    saved_inventory[get_slot] = item
+    local equippable = item.replica.equippable
+    if equippable == nil then return end
+
+    local eslot = equippable:EquipSlot()
     latest_get_items[eslot] = item
     latest_get_slots[eslot] = get_slot
-    saved_inventory[get_slot] = item
     print("ModOnItemGet data:", item, get_slot, eslot, "Finished Updating Saved Inventory")
 end
 
@@ -72,10 +74,12 @@ local function ModOnItemLose(inst, data) -- IMPORTANT EVENT FUNCTION THAT IS CAL
     end
     saved_inventory[removed_slot] = nil
     if eslot == nil then return end
+
     local previous_equipped_item = latest_equip_items[eslot]
     latest_equip_items[eslot] = equipped_item
     local item_to_move = nil
     local slot_taken_from = nil
+
     local function main_auto_switch(_)
         item_to_move = latest_get_items[eslot]
         slot_taken_from = latest_get_slots[eslot]
