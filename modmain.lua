@@ -1,151 +1,199 @@
---IMPORTANT NOTES:
---GetItemSlot from replica inventory returns nil
---"equip" and "unequip" events' data.item.prevslot return nil
-
-local ThePlayer = GLOBAL.ThePlayer
-local EQUIPSLOTS = GLOBAL.EQUIPSLOTS
-
 local ENV = env
 GLOBAL.setfenv(1, GLOBAL)
 
-local move_item_task = nil
-local mod_equipped_prevslots = {}
-local mod_current_inventory_slots = {}
+local latest_equip_items = {}
+local latest_get_items = {}
+local latest_get_slots = {}
+local saved_inventory = {}
 
-local function ModGetItemSlot(inventory, target_item)
-    if target_item == nil then
-        return nil
+--[[
+    Try taking if:
+        item is valid?/item is in slot_taken_from
+        item is not active item
+    until:
+        item is invalid/item is not in slot_taken_from
+        item is already the active item
+        an item already exists in removed_slot
+
+    Try moving/putting if:
+        item is valid and is activeitem
+        removed_slot is empty
+    until:
+        item is invalid or is no longer active item
+        item or an item is in removed_slot
+
+    Completely cancel task if?:
+        an item already exists in removed_slot
+        item is invalid
+]]
+
+local function delay_again(inst, fn)
+    inst:DoTaskInTime(0, fn)
+end
+
+local function item_in_list(item, list)
+	for _, v in pairs(list) do
+		if v == item then return true end
+	end
+	return false
+end
+
+local function print_data(data)
+    for k, v in pairs(data) do
+        print(k, v)
     end
-    local numslots = inventory:GetNumSlots()
-    print(numslots)
-    if numslots then
-        for slot = 1, numslots do
-            local item = inventory:GetItemInSlot(slot)
-            print(item)
-            if item == target_item then
-                return slot
-            end
+end
+
+local function ModOnEquip(inst, data)
+    if not (type(data) == "table" and data.eslot and data.item) then return end
+    local item = data.item
+    local eslot = data.eslot
+    local function update_latest_equip_fn_to_delay(_)
+        latest_equip_items[eslot] = item
+    end
+    inst:DoTaskInTime(0, update_latest_equip_fn_to_delay)
+    --print("ModOnEquip data.item:", item)
+    -- initial rough idea, deletable:
+    --if mod latest remove slot == nil or mod latest give slot == nil then return end
+    --if mod latest remove slot == mod latest give slot then return end
+    --move previous equipped item to latest remove slot
+end
+
+local function ModOnUnequip(_, data)
+    if type(data) ~= "table" then return end
+    local eslot = data.eslot
+    latest_equip_items[eslot] = nil
+end
+
+local function ModOnItemGet(_, data)
+    --record to mod latest get slot
+    local item = data.item
+    local get_slot = data.slot
+    saved_inventory[get_slot] = item
+    local equippable = item.replica.equippable
+    if equippable == nil then return end
+
+    local eslot = equippable:EquipSlot()
+    latest_get_items[eslot] = item
+    latest_get_slots[eslot] = get_slot
+    print("ModOnItemGet data:", item, get_slot, eslot, "Finished Updating Saved Inventory")
+end
+
+local function ModOnItemLose(inst, data) -- IMPORTANT EVENT FUNCTION THAT IS CALLED ONLY WHEN NEEDED! USE THIS! use separate removed_slot for every equipslot?, terminate when item has no equipslot?
+    local current_equips = inst.replica.inventory:GetEquips()
+    --print_data(current_equips)
+    local removed_slot = data.slot
+    local equipped_item = nil
+    local eslot = nil
+    for _, item in pairs(current_equips) do
+        --print(item, saved_inventory[removed_slot])
+        if item == saved_inventory[removed_slot] then
+            equipped_item = item
+            eslot = equipped_item.replica.equippable:EquipSlot()
+            break
         end
     end
-end
+    saved_inventory[removed_slot] = nil
+    if eslot == nil then return end
 
-local function cancel_move_task()
-    if move_item_task then
-        move_item_task:Cancel()
-        move_item_task = nil
+    local previous_equipped_item = latest_equip_items[eslot]
+    latest_equip_items[eslot] = equipped_item
+    local item_to_move = nil
+    local slot_taken_from = nil
+
+    local function main_auto_switch(inst)
+        item_to_move = latest_get_items[eslot]
+        slot_taken_from = latest_get_slots[eslot]
+        print("ModOnItemLose Variables:", equipped_item, removed_slot, eslot, "Finished Saving Shared Mod Variables")
+        if previous_equipped_item == item_to_move and previous_equipped_item and item_to_move then
+            print("Move", item_to_move, "from", slot_taken_from, "to", removed_slot) -- TO IMPLEMENT ACTUAL FUNCTION
+
+            local current_task = nil
+            local function cancel_task(task)
+                if task ~= nil then
+                    task:Cancel()
+                    task = nil
+                end
+            end
+            local function try_put_active_item_to_removed_slot()
+                local playercontroller = inst.components.playercontroller
+                local playercontroller_deploy_mode = playercontroller.deploy_mode --to study
+                playercontroller.deploy_mode = false
+                inst.replica.inventory:PutAllOfActiveItemInSlot(removed_slot)
+                playercontroller.deploy_mode = playercontroller_deploy_mode
+            end
+            local function put_prompt()
+                local inventory = inst.replica.inventory
+                if not item_to_move:IsValid() or inventory:GetItemInSlot(removed_slot) ~= nil then
+                    cancel_task(current_task)
+                elseif item_to_move == inventory:GetActiveItem() then -- if item is valid and is active item and removed_slot is empty
+                    try_put_active_item_to_removed_slot()
+                else
+                    cancel_task(current_task)
+                end
+            end
+
+            local function try_take_active_item_from_slot_taken_from()
+                local playercontroller = inst.components.playercontroller
+                local playercontroller_deploy_mode = playercontroller.deploy_mode --to study
+                playercontroller.deploy_mode = false
+                inst.replica.inventory:TakeActiveItemFromAllOfSlot(slot_taken_from)
+                playercontroller.deploy_mode = playercontroller_deploy_mode
+            end
+            local function take_prompt()
+                local inventory = inst.replica.inventory
+                if not item_to_move:IsValid() or inventory:GetItemInSlot(removed_slot) ~= nil then
+                    cancel_task(current_task)
+                elseif item_to_move == inventory:GetItemInSlot(slot_taken_from) then -- if item is valid and item is in slot_taken from and item is not active item then
+                    try_take_active_item_from_slot_taken_from()
+                elseif item_to_move == inventory:GetActiveItem() then -- if item is not in slot_taken from and item is active item
+                    cancel_task(current_task)
+                    current_task = inst:DoPeriodicTask(0, put_prompt)
+                else
+                    cancel_task(current_task)
+                end
+            end
+
+            current_task = inst:DoPeriodicTask(0, take_prompt)
+
+        end
     end
+    inst:DoTaskInTime(0, main_auto_switch)
 end
 
-local function item_move_is_valid(item, slot)
-    if item == nil then
-        return false
-    end
-    local inventory = ThePlayer.replica.inventory
-    if ModGetItemSlot(inventory, item) == slot then
-        return false
-    end
-    return true
-end
-
-local function move_item_attempt(item, slot)
-    local playercontroller = ThePlayer.components.playercontroller
-    local current_deploy_mode = playercontroller.deploy_mode
-    playercontroller.deploy_mode = false
-    local inventory = ThePlayer.replica.inventory
-    local slot_taken_from = ModGetItemSlot(inventory, item)
-    ThePlayer.replica.inventory:TakeActiveItemFromAllOfSlot(slot_taken_from)
-    ThePlayer.replica.inventory:PutAllOfActiveItemInSlot(slot)
-    playercontroller.deploy_mode = current_deploy_mode
-end
-
-local function move_item_repeater(_, item, slot)
-    if not item:isValid() or not item_move_is_valid(item, slot) then
-        cancel_move_task()
-    else
-        move_item_attempt(item, slot)
-    end
-end
-
-local function move_to_replacers_prevslot(item, slot)
-    if move_item_task then
-        cancel_move_task()
-    end
-    move_item_attempt(item, slot)
-    move_item_task = ThePlayer:DoPeriodicTask(0, move_item_repeater, nil, item)
-end
-
-local function ModOnEquip(_, data)
-    if type(data) == "table" and data.eslot and data.item then
-        local item = data.item
-        mod_equipped_prevslots[data.eslot] = item
-        print(item)
-        --print(item.prevslot) --always nil
-        --print(data.item.prefab)
-        --print(ModGetItemSlot(ThePlayer.replica.inventory, data.item)) --crashes coz... equipped item disappeared from slot?
-    end
-end
-
-local function some_print_debug(data)
-    print("3333 UNEQUIPPED ITEM AND CURRENT SLOT BELOW")
-    --print(data.item)
-    --print(data.item.prefab) --data.item is nil, so this line crashes
-    --print(ModGetItemSlot(ThePlayer.replica.inventory, data.item))
-end
-
-local function ModOnUnequip(inst, data)
-    if type(data) ~= "table" then return end
-    --local unequipped_item = mod_equipped_prevslots[data.eslot]
-    --if unequipped_item == nil then return end
-    local inventory = ThePlayer.replica.inventory
-    local newslot = ModGetItemSlot(inventory, unequipped_item)
-    if newslot ~= nil then
-        mod_current_inventory_slots[newslot] = unequipped_item -- WARNING - ITEMS OBTAINED NOT BY UNEQUIP EVENT ARE NOT YET CONSIDERED
-    end
-    mod_equipped_prevslots[data.eslot] = nil
-
-    --local current_equipped = mod_current_equipped_slots[data.eslot]
-    --[[
-    if current_equipped ~= nil then
-        if TheWorld.ismastersim then
-            inst:DoTaskInTime(0, )
-    end
-    ]]
-    --local replacers_prevslot = current_equipped.prevslot --oops
-    --print(data.slip) --seemingly always nil
-    --[[inst:DoTaskInTime(0, some_print_debug, data)
-    print(data.item)
-    if replacers_prevslot == nil then return end
-    if replacers_prevslot == data.item.prevslot then return end
-    move_to_replacers_prevslot(data.item, replacers_prevslot)]]
-end
-
-
-local function register_inventory_slots(inventory)
+local function load_whole_inventory(inst)
+    local inventory = inst.replica.inventory
+    if inventory == nil then return {} end
     local numslots = inventory:GetNumSlots()
-    if numslots == nil then return end
-    for slot = 1, numslots do
-        local item = inventory:GetItemInSlot(slot)
-        print(item)
-        mod_current_inventory_slots[slot] = item
+    local whole_inventory = {}
+    for slot=1, numslots do
+        whole_inventory[slot] = inventory:GetItemInSlot(slot)
+        --print(slot, inst.replica.inventory:GetItemInSlot(slot))
     end
+    return whole_inventory
 end
 
 ENV.AddComponentPostInit("playercontroller", function(self)
     if self.inst ~= ThePlayer then return end
-    print("7777 THE PLAYER SUCCESSFULLY REGISTERED")
+    local function initialize_inventory_and_equips(inst)
+        saved_inventory = load_whole_inventory(inst)
+        latest_equip_items = inst.replica.inventory:GetEquips()
+        print_data(saved_inventory)
+        print_data(latest_equip_items)
+    end
+    self.inst:DoTaskInTime(0, initialize_inventory_and_equips)
 
     self.inst:ListenForEvent("equip", ModOnEquip)
     self.inst:ListenForEvent("unequip", ModOnUnequip)
-
-    local inventory = ThePlayer.replica.inventory
-    if not self.ismastersim then
-        self.inst:DoTaskInTime(0, register_inventory_slots, inventory)
-    end
+    self.inst:ListenForEvent("itemget", ModOnItemGet)
+    self.inst:ListenForEvent("itemlose", ModOnItemLose)
 
     local OnRemoveFromEntity = self.OnRemoveFromEntity
     self.OnRemoveFromEntity = function(self, ...)
         self.inst:RemoveEventCallback("equip", ModOnEquip)
         self.inst:RemoveEventCallback("unequip", ModOnUnequip)
+        self.inst:RemoveEventCallback("itemget", ModOnItemGet)
+        self.inst:ListenForEvent("itemlose", ModOnItemLose)
         return OnRemoveFromEntity(self, ...)
     end
 end)
