@@ -2,27 +2,25 @@
 --GetItemSlot from replica inventory returns nil
 --"equip" and "unequip" events' data.item.prevslot return nil
 
---local ThePlayer = GLOBAL.ThePlayer
---local EQUIPSLOTS = GLOBAL.EQUIPSLOTS
+local ThePlayer = GLOBAL.ThePlayer
+local EQUIPSLOTS = GLOBAL.EQUIPSLOTS
 
 local ENV = env
 GLOBAL.setfenv(1, GLOBAL)
 
 local move_item_task = nil
-local mod_current_equipped_slots = {}
+local mod_equipped_prevslots = {}
+local mod_current_inventory_slots = {}
 
 local function ModGetItemSlot(inventory, target_item)
-    print("6666 ModGetItemSlot INITIATED")
     if target_item == nil then
         return nil
     end
     local numslots = inventory:GetNumSlots()
-    print("4444 NUMSLOTS PRINTED BELOW")
     print(numslots)
     if numslots then
         for slot = 1, numslots do
             local item = inventory:GetItemInSlot(slot)
-            print("5555 ITERATED ITEM PRINTED BELOW")
             print(item)
             if item == target_item then
                 return slot
@@ -31,7 +29,7 @@ local function ModGetItemSlot(inventory, target_item)
     end
 end
 
-local function CancelEquipTask()
+local function cancel_move_task()
     if move_item_task then
         move_item_task:Cancel()
         move_item_task = nil
@@ -62,7 +60,7 @@ end
 
 local function move_item_repeater(_, item, slot)
     if not item:isValid() or not item_move_is_valid(item, slot) then
-        CancelEquipTask()
+        cancel_move_task()
     else
         move_item_attempt(item, slot)
     end
@@ -70,7 +68,7 @@ end
 
 local function move_to_replacers_prevslot(item, slot)
     if move_item_task then
-        CancelEquipTask()
+        cancel_move_task()
     end
     move_item_attempt(item, slot)
     move_item_task = ThePlayer:DoPeriodicTask(0, move_item_repeater, nil, item)
@@ -79,12 +77,11 @@ end
 local function ModOnEquip(_, data)
     if type(data) == "table" and data.eslot and data.item then
         local item = data.item
-        mod_current_equipped_slots[data.eslot] = item
-        print("2222 equipped info BELOW")
+        mod_equipped_prevslots[data.eslot] = item
         print(item)
-        print(item.prevslot)
+        --print(item.prevslot) --always nil
         --print(data.item.prefab)
-        --print(ModGetItemSlot(ThePlayer.replica.inventory, data.item)) --crashes coz equipped item disappeared from slot
+        --print(ModGetItemSlot(ThePlayer.replica.inventory, data.item)) --crashes coz... equipped item disappeared from slot?
     end
 end
 
@@ -97,44 +94,54 @@ end
 
 local function ModOnUnequip(inst, data)
     if type(data) ~= "table" then return end
-    local item = data.item
-    print(item)
-    print(data.eslot)
-    local current_equipped = mod_current_equipped_slots[data.eslot]
-    if current_equipped == nil then return end
-    local replacers_prevslot = current_equipped.prevslot
+    --local unequipped_item = mod_equipped_prevslots[data.eslot]
+    --if unequipped_item == nil then return end
+    local inventory = ThePlayer.replica.inventory
+    local newslot = ModGetItemSlot(inventory, unequipped_item)
+    if newslot ~= nil then
+        mod_current_inventory_slots[newslot] = unequipped_item -- WARNING - ITEMS OBTAINED NOT BY UNEQUIP EVENT ARE NOT YET CONSIDERED
+    end
+    mod_equipped_prevslots[data.eslot] = nil
+
+    --local current_equipped = mod_current_equipped_slots[data.eslot]
+    --[[
+    if current_equipped ~= nil then
+        if TheWorld.ismastersim then
+            inst:DoTaskInTime(0, )
+    end
+    ]]
+    --local replacers_prevslot = current_equipped.prevslot --oops
     --print(data.slip) --seemingly always nil
     --[[inst:DoTaskInTime(0, some_print_debug, data)
     print(data.item)
     if replacers_prevslot == nil then return end
     if replacers_prevslot == data.item.prevslot then return end
-
-    move_to_replacers_prevslot(data.item, replacers_prevslot)
-    mod_current_equipped_slots[data.eslot] = nil]]
+    move_to_replacers_prevslot(data.item, replacers_prevslot)]]
 end
 
 
-local function register_equipped_items(inst)
-    for _, eslot in pairs(EQUIPSLOTS) do
-        ModOnEquip(inst, {
-            eslot = eslot,
-            item = inst.replica.inventory:GetEquippedItem(eslot)
-        })
+local function register_inventory_slots(inventory)
+    local numslots = inventory:GetNumSlots()
+    if numslots == nil then return end
+    for slot = 1, numslots do
+        local item = inventory:GetItemInSlot(slot)
+        print(item)
+        mod_current_inventory_slots[slot] = item
     end
 end
 
 ENV.AddComponentPostInit("playercontroller", function(self)
-    --print("6666 POSTINIT SPECIALIZED")
     if self.inst ~= ThePlayer then return end
     print("7777 THE PLAYER SUCCESSFULLY REGISTERED")
 
     self.inst:ListenForEvent("equip", ModOnEquip)
     self.inst:ListenForEvent("unequip", ModOnUnequip)
---[[
+
+    local inventory = ThePlayer.replica.inventory
     if not self.ismastersim then
-        self.inst:DoTaskInTime(0, register_equipped_items)
+        self.inst:DoTaskInTime(0, register_inventory_slots, inventory)
     end
-]]
+
     local OnRemoveFromEntity = self.OnRemoveFromEntity
     self.OnRemoveFromEntity = function(self, ...)
         self.inst:RemoveEventCallback("equip", ModOnEquip)

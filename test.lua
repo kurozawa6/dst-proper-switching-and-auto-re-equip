@@ -27,60 +27,6 @@ local saved_inventory = {}
         item is invalid
 ]]
 
-local function cancel_task(current_task)
-    if current_task ~= nil then
-        current_task:Cancel()
-        current_task = nil
-    end
-end
-
-local function try_take_active_item_from_slot(inst, slot)
-    local playercontroller = inst.components.playercontroller
-    local playercontroller_deploy_mode = playercontroller.deploy_mode --to study
-    playercontroller.deploy_mode = false
-    inst.replica.inventory:TakeActiveItemFromAllOfSlot(slot)
-    playercontroller.deploy_mode = playercontroller_deploy_mode
-end
-
-local function take_prompt(inst, current_task, put_prompt_fn, item, slot_taken_from, removed_slot)
-    local inventory = inst.replica.inventory
-    if not item:IsValid() or inventory:GetItemInSlot(removed_slot) ~= nil then
-        cancel_task(current_task)
-    elseif item == inventory:GetItemInSlot(slot_taken_from) then -- if item is valid and item is in slot_taken from and item is not active item then
-        try_take_active_item_from_slot(inst, slot_taken_from)
-    elseif item == inventory:GetActiveItem() then -- if item is not in slot_taken from and item is active item
-        cancel_task(current_task)
-        current_task = inst:DoPeriodicTask(0, put_prompt_fn, current_task, item, removed_slot)
-    else
-        cancel_task(current_task)
-    end
-end
-
-local function try_put_active_item_to_slot(inst, slot)
-    local playercontroller = inst.components.playercontroller
-    local playercontroller_deploy_mode = playercontroller.deploy_mode --to study
-    playercontroller.deploy_mode = false
-    inst.replica.inventory:PutAllOfActiveItemInSlot(slot)
-    playercontroller.deploy_mode = playercontroller_deploy_mode
-end
-
-local function put_prompt(inst, current_task, item, removed_slot)
-    local inventory = inst.replica.inventory
-    if not item:IsValid() or inventory:GetItemInSlot(removed_slot) ~= nil then
-        cancel_task(current_task)
-    elseif item == inventory:GetActiveItem() then -- if item is valid and is active item and removed_slot is empty
-        cancel_task(current_task)
-        try_put_active_item_to_slot(inst, removed_slot)
-    else
-        cancel_task(current_task)
-    end
-end
-
-local function move_task(inst, item, slot_taken_from, removed_slot)
-    local current_task = nil
-    current_task = inst:DoPeriodicTask(0, take_prompt, current_task, put_prompt, item, slot_taken_from, removed_slot)
-end
-
 local function delay_again(inst, fn)
     inst:DoTaskInTime(0, fn)
 end
@@ -161,7 +107,55 @@ local function ModOnItemLose(inst, data) -- IMPORTANT EVENT FUNCTION THAT IS CAL
         print("ModOnItemLose Variables:", equipped_item, removed_slot, eslot, "Finished Saving Shared Mod Variables")
         if previous_equipped_item == item_to_move and previous_equipped_item and item_to_move then
             print("Move", item_to_move, "from", slot_taken_from, "to", removed_slot) -- TO IMPLEMENT ACTUAL FUNCTION
-            move_task(inst, item_to_move, slot_taken_from, removed_slot)
+
+            local current_task = nil
+            local function cancel_task(task)
+                if task ~= nil then
+                    task:Cancel()
+                    task = nil
+                end
+            end
+            local function try_put_active_item_to_removed_slot()
+                local playercontroller = inst.components.playercontroller
+                local playercontroller_deploy_mode = playercontroller.deploy_mode --to study
+                playercontroller.deploy_mode = false
+                inst.replica.inventory:PutAllOfActiveItemInSlot(removed_slot)
+                playercontroller.deploy_mode = playercontroller_deploy_mode
+            end
+            local function put_prompt()
+                local inventory = inst.replica.inventory
+                if not item_to_move:IsValid() or inventory:GetItemInSlot(removed_slot) ~= nil then
+                    cancel_task(current_task)
+                elseif item_to_move == inventory:GetActiveItem() then -- if item is valid and is active item and removed_slot is empty
+                    try_put_active_item_to_removed_slot()
+                else
+                    cancel_task(current_task)
+                end
+            end
+
+            local function try_take_active_item_from_slot_taken_from()
+                local playercontroller = inst.components.playercontroller
+                local playercontroller_deploy_mode = playercontroller.deploy_mode --to study
+                playercontroller.deploy_mode = false
+                inst.replica.inventory:TakeActiveItemFromAllOfSlot(slot_taken_from)
+                playercontroller.deploy_mode = playercontroller_deploy_mode
+            end
+            local function take_prompt()
+                local inventory = inst.replica.inventory
+                if not item_to_move:IsValid() or inventory:GetItemInSlot(removed_slot) ~= nil then
+                    cancel_task(current_task)
+                elseif item_to_move == inventory:GetItemInSlot(slot_taken_from) then -- if item is valid and item is in slot_taken from and item is not active item then
+                    try_take_active_item_from_slot_taken_from()
+                elseif item_to_move == inventory:GetActiveItem() then -- if item is not in slot_taken from and item is active item
+                    cancel_task(current_task)
+                    current_task = inst:DoPeriodicTask(0, put_prompt)
+                else
+                    cancel_task(current_task)
+                end
+            end
+
+            current_task = inst:DoPeriodicTask(0, take_prompt)
+
         end
     end
     inst:DoTaskInTime(0, main_auto_switch)
