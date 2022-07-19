@@ -4,7 +4,7 @@ GLOBAL.setfenv(1, GLOBAL)
 local latest_equip_items = {}
 local latest_get_items = {}
 local latest_get_slots = {}
-local saved_inventory = {}
+local previous_saved_inventory = {}
 
 local function print_data(data) --for debugging
     for k, v in pairs(data) do
@@ -40,23 +40,23 @@ local function try_take_active_item_from_slot(inst, slot)
     do_invntry_act_on_slot_w_dmmode_false(inst, slot, inst.replica.inventory.TakeActiveItemFromAllOfSlot)
 end
 
-local function main_auto_switch(inst, eslot, prev_equipped_item, removed_slot)
+local function main_auto_switch(inst, eslot, previous_equipped_item, removed_slot)
     local obtained_item = latest_get_items[eslot]
     local slot_taken_from = latest_get_slots[eslot]
-    if prev_equipped_item == obtained_item and prev_equipped_item and obtained_item then
-        --print("Move", prev_equipped_item, "from", slot_taken_from, "to", removed_slot)
+    if previous_equipped_item == obtained_item and previous_equipped_item and obtained_item then
+        --print("Move", previous_equipped_item, "from", slot_taken_from, "to", removed_slot)
         local current_task = nil
 
         local function put_prompt()
             local inventory = inst.replica.inventory
             local item_on_dest_slot = inventory:GetItemInSlot(removed_slot)
-            if not prev_equipped_item:IsValid() or
-                   prev_equipped_item ~= inventory:GetActiveItem() or
-                   prev_equipped_item == item_on_dest_slot then --or item_on_dest_slot ~= nil then
+            if not previous_equipped_item:IsValid() or
+                   previous_equipped_item ~= inventory:GetActiveItem() or
+                   previous_equipped_item == item_on_dest_slot then --or item_on_dest_slot ~= nil then
                 cancel_task(current_task)
             elseif item_on_dest_slot == nil then
                 try_put_active_item_to_slot(inst, removed_slot)
-            elseif item_on_dest_slot ~= nil then --and prev_equipped_item ~= item_on_dest_slot then
+            elseif item_on_dest_slot ~= nil then --and previous_equipped_item ~= item_on_dest_slot then
                 try_swap_active_item_with_slot(inst, removed_slot)
             else
                 cancel_task(current_task)
@@ -67,18 +67,18 @@ local function main_auto_switch(inst, eslot, prev_equipped_item, removed_slot)
             local item_on_dest_slot = inventory:GetItemInSlot(removed_slot)
             local item_on_slot_to_take = inventory:GetItemInSlot(slot_taken_from)
             if inventory:GetActiveItem() ~= nil and
-               inventory:GetActiveItem() == prev_equipped_item and
-               prev_equipped_item:IsValid() then
+               inventory:GetActiveItem() == previous_equipped_item and
+               previous_equipped_item:IsValid() then
                 cancel_task(current_task)
                 current_task = inst:DoPeriodicTask(0, put_prompt)
-            elseif not prev_equipped_item:IsValid() or
-                       prev_equipped_item ~= item_on_slot_to_take or
-                       prev_equipped_item == item_on_dest_slot or --or item_on_dest_slot ~= nil then
+            elseif not previous_equipped_item:IsValid() or
+                       previous_equipped_item ~= item_on_slot_to_take or
+                       previous_equipped_item == item_on_dest_slot or --or item_on_dest_slot ~= nil then
                        item_on_slot_to_take == nil then
                 cancel_task(current_task)
-                print("Task Cancelled with the following conditions:")
-                print(prev_equipped_item:IsValid(), prev_equipped_item ~= item_on_slot_to_take, prev_equipped_item == item_on_dest_slot, item_on_slot_to_take == nil)
-            elseif prev_equipped_item == item_on_slot_to_take then
+                --print("Task Cancelled with the following conditions:")
+                --print(previous_equipped_item:IsValid(), previous_equipped_item ~= item_on_slot_to_take, previous_equipped_item == item_on_dest_slot, item_on_slot_to_take == nil)
+            elseif previous_equipped_item == item_on_slot_to_take then
                 try_take_active_item_from_slot(inst, slot_taken_from)
             else
                 cancel_task(current_task)
@@ -89,15 +89,31 @@ local function main_auto_switch(inst, eslot, prev_equipped_item, removed_slot)
     end
 end
 
-local function update_latest_equip_fn_to_delay(_, item, eslot)
-    latest_equip_items[eslot] = item
-end
+--local function update_latest_equip_fn_to_delay(_, item, eslot)
+    --latest_equip_items[eslot] = item
+--end
 
 local function ModOnEquip(inst, data)
     if not (type(data) == "table" and data.eslot and data.item) then return end
-    local item = data.item
+    local latest_equipped_item = data.item
     local eslot = data.eslot
-    inst:DoTaskInTime(0, update_latest_equip_fn_to_delay, item, eslot)
+    -- rewrite needed vars: eslot, previous_equipped_item, removed_slot
+    local previous_equipped_item = nil
+    local removed_slot = nil
+    if latest_equip_items[eslot] then
+        previous_equipped_item = latest_equip_items[eslot]
+    end
+    latest_equip_items[eslot] = latest_equipped_item
+
+    for slot, item in pairs(previous_saved_inventory) do
+        if item == latest_equipped_item then -- if the latest equipped item is found on the previous saved inventory, then get its slot as slot to take
+            removed_slot = slot
+            break
+        end
+    end
+    if removed_slot == nil then return end
+    inst:DoTaskInTime(0, main_auto_switch, eslot, previous_equipped_item, removed_slot)
+    --inst:DoTaskInTime(0, update_latest_equip_fn_to_delay, item, eslot)
 end
 
 local function ModOnUnequip(_, data)
@@ -109,7 +125,7 @@ end
 local function ModOnItemGet(_, data)
     local item = data.item
     local get_slot = data.slot
-    saved_inventory[get_slot] = item
+    previous_saved_inventory[get_slot] = item
     local equippable = item.replica.equippable
     if equippable == nil then return end
 
@@ -119,25 +135,32 @@ local function ModOnItemGet(_, data)
     --print("ModOnItemGet data:", item, get_slot, eslot, "Finished Updating Saved Inventory")
 end
 
-local function ModOnItemLose(inst, data) -- IMPORTANT EVENT FUNCTION THAT IS CALLED ONLY WHEN NEEDED! USE THIS!
-    local current_equips = inst.replica.inventory:GetEquips()
+local function update_removal_previous_inventory_fn_to_delay(_, removed_slot)
+    previous_saved_inventory[removed_slot] = nil
+end
+
+local function ModOnItemLose(inst, data) -- Huge mistake on hindsight: "IMPORTANT EVENT FUNCTION THAT IS CALLED ONLY WHEN NEEDED! USE THIS!"
     local removed_slot = data.slot
-    local equipped_item = nil
-    local eslot = nil
+    inst:DoTaskInTime(0, update_removal_previous_inventory_fn_to_delay, removed_slot)
+    --local equipped_item = nil
+    --local current_equips = inst.replica.inventory:GetEquips()
+    --local eslot = nil
+    --[[
     for _, item in pairs(current_equips) do
-        if item == saved_inventory[removed_slot] then
+        if item == previous_saved_inventory[removed_slot] then
             equipped_item = item
             eslot = equipped_item.replica.equippable:EquipSlot()
             break
         end
     end
-    saved_inventory[removed_slot] = nil
-    if eslot == nil then return end
+    ]]
 
-    local prev_equipped_item = latest_equip_items[eslot]
-    latest_equip_items[eslot] = equipped_item
+    --if eslot == nil then return end
+
+    --local previous_equipped_item = latest_equip_items[eslot]
+    --latest_equip_items[eslot] = equipped_item
     --print("ModOnItemLose Variables:", equipped_item, removed_slot, eslot, "Finished Saving Shared Mod Variables")
-    inst:DoTaskInTime(0, main_auto_switch, eslot, prev_equipped_item, removed_slot)
+    --inst:DoTaskInTime(0, main_auto_switch, eslot, previous_equipped_item, removed_slot)
 end
 
 local function load_whole_inventory(inst)
@@ -152,9 +175,9 @@ local function load_whole_inventory(inst)
 end
 
 local function initialize_inventory_and_equips(inst)
-    saved_inventory = load_whole_inventory(inst)
+    previous_saved_inventory = load_whole_inventory(inst)
     latest_equip_items = inst.replica.inventory:GetEquips()
-    print_data(saved_inventory)
+    print_data(previous_saved_inventory)
     print_data(latest_equip_items)
 end
 
