@@ -6,20 +6,78 @@ local latest_get_items = {}
 local latest_get_slots = {}
 local saved_inventory = {}
 
-local function print_data(data)
+local function print_data(data) --for debugging
     for k, v in pairs(data) do
         print(k, v)
     end
+end
+
+local function cancel_task(task)
+    if task ~= nil then
+        task:Cancel()
+        task = nil
+    end
+end
+local function try_put_active_item_to_slot(inst, slot)
+    local playercontroller = inst.components.playercontroller
+    local playercontroller_deploy_mode = playercontroller.deploy_mode --to study
+    playercontroller.deploy_mode = false
+    inst.replica.inventory:PutAllOfActiveItemInSlot(slot)
+    playercontroller.deploy_mode = playercontroller_deploy_mode
+end
+
+local function try_take_active_item_from_slot(inst, slot)
+    local playercontroller = inst.components.playercontroller
+    local playercontroller_deploy_mode = playercontroller.deploy_mode --to study
+    playercontroller.deploy_mode = false
+    inst.replica.inventory:TakeActiveItemFromAllOfSlot(slot)
+    playercontroller.deploy_mode = playercontroller_deploy_mode
+end
+
+local function main_auto_switch(inst, eslot, previous_equipped_item, removed_slot)
+    local item_to_move = latest_get_items[eslot]
+    local slot_taken_from = latest_get_slots[eslot]
+    if previous_equipped_item == item_to_move and previous_equipped_item and item_to_move then
+        --print("Move", item_to_move, "from", slot_taken_from, "to", removed_slot)
+        local current_task = nil
+
+        local function put_prompt()
+            local inventory = inst.replica.inventory
+            if not item_to_move:IsValid() or inventory:GetItemInSlot(removed_slot) ~= nil then
+                cancel_task(current_task)
+            elseif item_to_move == inventory:GetActiveItem() then
+                try_put_active_item_to_slot(inst, removed_slot)
+            else
+                cancel_task(current_task)
+            end
+        end
+        local function take_prompt()
+            local inventory = inst.replica.inventory
+            if not item_to_move:IsValid() or inventory:GetItemInSlot(removed_slot) ~= nil then
+                cancel_task(current_task)
+            elseif item_to_move == inventory:GetItemInSlot(slot_taken_from) then
+                try_take_active_item_from_slot(inst, slot_taken_from)
+            elseif item_to_move == inventory:GetActiveItem() then
+                cancel_task(current_task)
+                current_task = inst:DoPeriodicTask(0, put_prompt)
+            else
+                cancel_task(current_task)
+            end
+        end
+
+        current_task = inst:DoPeriodicTask(0, take_prompt)
+    end
+end
+
+local function update_latest_equip_fn_to_delay(_, item, eslot)
+    latest_equip_items[eslot] = item
 end
 
 local function ModOnEquip(inst, data)
     if not (type(data) == "table" and data.eslot and data.item) then return end
     local item = data.item
     local eslot = data.eslot
-    local function update_latest_equip_fn_to_delay(_)
-        latest_equip_items[eslot] = item
-    end
-    inst:DoTaskInTime(0, update_latest_equip_fn_to_delay)
+    inst:DoTaskInTime(0, update_latest_equip_fn_to_delay, item, eslot)
 end
 
 local function ModOnUnequip(_, data)
@@ -58,67 +116,8 @@ local function ModOnItemLose(inst, data) -- IMPORTANT EVENT FUNCTION THAT IS CAL
 
     local previous_equipped_item = latest_equip_items[eslot]
     latest_equip_items[eslot] = equipped_item
-    local item_to_move = nil
-    local slot_taken_from = nil
-
-    local function main_auto_switch(inst)
-        item_to_move = latest_get_items[eslot]
-        slot_taken_from = latest_get_slots[eslot]
-        --print("ModOnItemLose Variables:", equipped_item, removed_slot, eslot, "Finished Saving Shared Mod Variables")
-        if previous_equipped_item == item_to_move and previous_equipped_item and item_to_move then
-            --print("Move", item_to_move, "from", slot_taken_from, "to", removed_slot)
-
-            local current_task = nil
-            local function cancel_task(task)
-                if task ~= nil then
-                    task:Cancel()
-                    task = nil
-                end
-            end
-            local function try_put_active_item_to_removed_slot()
-                local playercontroller = inst.components.playercontroller
-                local playercontroller_deploy_mode = playercontroller.deploy_mode --to study
-                playercontroller.deploy_mode = false
-                inst.replica.inventory:PutAllOfActiveItemInSlot(removed_slot)
-                playercontroller.deploy_mode = playercontroller_deploy_mode
-            end
-            local function put_prompt()
-                local inventory = inst.replica.inventory
-                if not item_to_move:IsValid() or inventory:GetItemInSlot(removed_slot) ~= nil then
-                    cancel_task(current_task)
-                elseif item_to_move == inventory:GetActiveItem() then
-                    try_put_active_item_to_removed_slot()
-                else
-                    cancel_task(current_task)
-                end
-            end
-
-            local function try_take_active_item_from_slot_taken_from()
-                local playercontroller = inst.components.playercontroller
-                local playercontroller_deploy_mode = playercontroller.deploy_mode --to study
-                playercontroller.deploy_mode = false
-                inst.replica.inventory:TakeActiveItemFromAllOfSlot(slot_taken_from)
-                playercontroller.deploy_mode = playercontroller_deploy_mode
-            end
-            local function take_prompt()
-                local inventory = inst.replica.inventory
-                if not item_to_move:IsValid() or inventory:GetItemInSlot(removed_slot) ~= nil then
-                    cancel_task(current_task)
-                elseif item_to_move == inventory:GetItemInSlot(slot_taken_from) then
-                    try_take_active_item_from_slot_taken_from()
-                elseif item_to_move == inventory:GetActiveItem() then
-                    cancel_task(current_task)
-                    current_task = inst:DoPeriodicTask(0, put_prompt)
-                else
-                    cancel_task(current_task)
-                end
-            end
-
-            current_task = inst:DoPeriodicTask(0, take_prompt)
-
-        end
-    end
-    inst:DoTaskInTime(0, main_auto_switch)
+    --print("ModOnItemLose Variables:", equipped_item, removed_slot, eslot, "Finished Saving Shared Mod Variables")
+    inst:DoTaskInTime(0, main_auto_switch, eslot, previous_equipped_item, removed_slot)
 end
 
 local function load_whole_inventory(inst)
