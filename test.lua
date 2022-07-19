@@ -99,15 +99,10 @@ local function main_auto_switch(inst, eslot, previous_equipped_item, removed_slo
     end
 end
 
---local function update_latest_equip_fn_to_delay(_, item, eslot)
-    --latest_equip_items[eslot] = item
---end
-
 local function ModOnEquip(inst, data)
     if not (type(data) == "table" and data.eslot and data.item) then return end
     local latest_equipped_item = data.item
     local eslot = data.eslot
-    -- rewrite needed vars: eslot, previous_equipped_item, removed_slot
     local previous_equipped_item = nil
     local removed_slot = nil
     if latest_equip_items[eslot] then
@@ -116,7 +111,7 @@ local function ModOnEquip(inst, data)
     latest_equip_items[eslot] = latest_equipped_item
 
     for slot, item in pairs(previous_saved_inventory) do
-        print(slot, item)
+        --print(slot, item) --verbose, for debugging only
         if item == latest_equipped_item then -- if the latest equipped item is found on the previous saved inventory, then get its slot as slot to take
             removed_slot = slot
             break
@@ -133,7 +128,6 @@ local function ModOnEquip(inst, data)
         return
     end
     inst:DoTaskInTime(0, main_auto_switch, eslot, previous_equipped_item, removed_slot)
-    --inst:DoTaskInTime(0, update_latest_equip_fn_to_delay, item, eslot)
 end
 
 local function ModOnUnequip(_, data)
@@ -166,25 +160,6 @@ end
 local function ModOnItemLose(inst, data) -- Huge mistake on hindsight: "IMPORTANT EVENT FUNCTION THAT IS CALLED ONLY WHEN NEEDED! USE THIS!"
     local removed_slot = data.slot
     inst:DoTaskInTime(0, update_removal_previous_inventory_fn_to_delay, removed_slot)
-    --local equipped_item = nil
-    --local current_equips = inst.replica.inventory:GetEquips()
-    --local eslot = nil
-    --[[
-    for _, item in pairs(current_equips) do
-        if item == previous_saved_inventory[removed_slot] then
-            equipped_item = item
-            eslot = equipped_item.replica.equippable:EquipSlot()
-            break
-        end
-    end
-    ]]
-
-    --if eslot == nil then return end
-
-    --local previous_equipped_item = latest_equip_items[eslot]
-    --latest_equip_items[eslot] = equipped_item
-    --print("ModOnItemLose Variables:", equipped_item, removed_slot, eslot, "Finished Saving Shared Mod Variables")
-    --inst:DoTaskInTime(0, main_auto_switch, eslot, previous_equipped_item, removed_slot)
 end
 
 local function load_whole_inventory(inst)
