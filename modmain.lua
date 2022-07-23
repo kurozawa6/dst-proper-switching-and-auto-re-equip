@@ -181,7 +181,7 @@ local function item_tables_to_check(inst)
     return tables_to_check
 end
 
-local function next_item_from_tables_with_same_prefab(tables_to_check, item_to_compare)
+local function next_same_prefab_item_from_tables(tables_to_check, item_to_compare)
     for _, item_table in ipairs(tables_to_check) do
         for _,item in pairs(item_table) do
             if item.prefab == item_to_compare.prefab then
@@ -196,14 +196,14 @@ local function main_auto_equip(inst, unequipped_item, eslot, previous_is_project
     if unequipped_item == nil then return end
     local inventory = inst.replica.inventory
     local unequipped_is_invalid = not unequipped_item:IsValid()
-    local unequipped_has_noclick = unequipped_item:HasTag("NOCLICK")
+    local unequipped_has_tag_noclick = unequipped_item:HasTag("NOCLICK")
     local autoequip_is_valid = false
     if not previous_is_projectile then
-        if unequipped_is_invalid then
+        if unequipped_is_invalid then --if non-projectile item is no longer valid (broken)
             autoequip_is_valid = true
         end
     else
-        if unequipped_has_noclick then
+        if unequipped_has_tag_noclick then --if projectile item is thrown (only happens when it's the last ammo)
             autoequip_is_valid = true
         end
     end
@@ -216,7 +216,7 @@ local function main_auto_equip(inst, unequipped_item, eslot, previous_is_project
             return
         end
         local tables_to_check = item_tables_to_check(inst)
-        local item_to_equip = next_item_from_tables_with_same_prefab(tables_to_check, unequipped_item)
+        local item_to_equip = next_same_prefab_item_from_tables(tables_to_check, unequipped_item)
         if item_to_equip == nil then
             cancel_task(current_task)
         elseif item_to_equip:IsValid() then
