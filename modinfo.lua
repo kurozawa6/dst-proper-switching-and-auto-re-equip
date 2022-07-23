@@ -1,5 +1,5 @@
-name = "DST Equipment Switcher Client"
-description = "This client side mod works when joining other servers or hosting your own DST server with caves. Equipping an item in your inventory by right clicking or keyboard shortcuts will now automatically switch its \"saved slot\" with the one you are wearing."
+name = "Proper Equipment Switching (DST Equipment Switcher Client)"
+description = "This client side mod works when joining other servers or hosting your own DST server with caves. Equipping another item in your inventory via keyboard shortcuts or right clicks will now automatically switch its \"saved slot\" with the one you were previously wearing."
 author = "Growth Mindset"
 forumthread = ""
 
