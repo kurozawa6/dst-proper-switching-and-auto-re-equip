@@ -124,9 +124,9 @@ local function ModOnEquip(inst, data)
 end
 
 local function ModOnUnequip(_, data)
-   if type(data) ~= "table" then return end
-   local eslot = data.eslot
-   latest_equip_items[eslot] = nil
+    if type(data) ~= "table" then return end
+    local eslot = data.eslot
+    latest_equip_items[eslot] = nil
 end
 
 local function update_obtain_previous_inventory_fn_to_delay(_, get_slot, item)
