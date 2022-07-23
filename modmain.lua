@@ -122,13 +122,6 @@ local function ModOnEquip(inst, data)
             break
         end
     end
-
-    if removed_slot == nil and eslot and previous_equipped_item and latest_equipped_item then
-        print("Main Auto Switch FN Unexpectedly Failed to Run with the Following:")
-        print("Previous Equipped:", previous_equipped_item)
-        print("Latest Equipped:", latest_equipped_item)
-        print("Eslot:", eslot)
-    end
     if removed_slot == nil then
         return
     end
