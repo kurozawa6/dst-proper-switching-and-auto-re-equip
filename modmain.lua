@@ -5,6 +5,7 @@ local latest_equip_items = {}
 local latest_get_items = {}
 local latest_get_slots = {}
 local previous_saved_inventory = {}
+local saved_handequip_is_projectile = false
 
 local function print_data(data) --for debugging
     for k, v in pairs(data) do
@@ -110,6 +111,10 @@ local function ModOnEquip(inst, data)
     end
     latest_equip_items[eslot] = latest_equipped_item
 
+    if eslot == EQUIPSLOTS.HANDS then
+        saved_handequip_is_projectile = latest_equipped_item:HasTag("projectile")
+    end
+
     for slot, item in pairs(previous_saved_inventory) do
         --print(slot, item) --verbose, for debugging only
         if item == latest_equipped_item then -- if the latest equipped item is found on the previous saved inventory, then get its slot as slot to take
@@ -130,9 +135,18 @@ local function ModOnEquip(inst, data)
     inst:DoTaskInTime(0, main_auto_switch, eslot, previous_equipped_item, removed_slot)
 end
 
-local function check_for_unequip(_, item, eslot)
-    if not item:IsValid() or item:HasTag("projectile") and item:HasTag("NOCLICK") then
-        print("IsValid:", item:IsValid(), "HasTag(\"projectile\"):", item:HasTag("projectile"), "HasTag(\"NOCLICK\"):", item:HasTag("NOCLICK"))
+local function autoequip_prompt(_, item, eslot, is_projectile)
+    if eslot ~= EQUIPSLOTS.HANDS then return end
+    if not is_projectile then
+        if not item:IsValid() then
+            print("Item detected to be broken:", item)
+            print("Initiate Auto Re-equip...")
+        end
+    else
+        if item:HasTag("NOCLICK") then -- Most projectiles have "NOCLICK" tag when thrown while boomerang doesn't.
+            print("Item detected to be projectile and has NOCLICK tag:", item)
+            print("Initiate Auto Reload...")
+        end
     end
 end
 
@@ -142,7 +156,9 @@ local function ModOnUnequip(inst, data)
     local item = latest_equip_items[eslot]
     latest_equip_items[eslot] = nil
     if item == nil then return end -- to change?
-    inst:DoTaskInTime(0, check_for_unequip, item, eslot)
+    local previous_is_projectile = saved_handequip_is_projectile -- needed as "projectile" tag is removed upon item removal i.e. being merged into another stack
+    saved_handequip_is_projectile = false
+    inst:DoTaskInTime(0, autoequip_prompt, item, eslot, previous_is_projectile)
 end
 
 local function update_obtain_previous_inventory_fn_to_delay(_, get_slot, item)
@@ -185,8 +201,13 @@ end
 local function initialize_inventory_and_equips(inst)
     previous_saved_inventory = load_whole_inventory(inst)
     latest_equip_items = inst.replica.inventory:GetEquips()
+    local handequip = latest_equip_items[EQUIPSLOTS.HANDS]
+    if handequip ~= nil then
+        saved_handequip_is_projectile = handequip:HasTag("projectile")
+    end
     print_data(previous_saved_inventory)
     print_data(latest_equip_items)
+    print("Hand Equipment is Projectile:", saved_handequip_is_projectile)
 end
 
 ENV.AddComponentPostInit("playercontroller", function(self)
@@ -203,7 +224,7 @@ ENV.AddComponentPostInit("playercontroller", function(self)
         self.inst:RemoveEventCallback("equip", ModOnEquip)
         self.inst:RemoveEventCallback("unequip", ModOnUnequip)
         self.inst:RemoveEventCallback("itemget", ModOnItemGet)
-        self.inst:ListenForEvent("itemlose", ModOnItemLose)
+        self.inst:RemoveEventCallback("itemlose", ModOnItemLose)
         return OnRemoveFromEntity(self, ...)
     end
 end)
