@@ -142,7 +142,7 @@ local function ModOnUnequip(inst, data)
     local item = latest_equip_items[eslot]
     latest_equip_items[eslot] = nil
     if item == nil then return end -- to change?
-    inst:DoTaskInTime(0, check_for_unequip)
+    inst:DoTaskInTime(0, check_for_unequip, item, eslot)
 end
 
 local function update_obtain_previous_inventory_fn_to_delay(_, get_slot, item)
