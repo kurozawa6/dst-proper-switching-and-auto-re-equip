@@ -1,5 +1,5 @@
-name = "DST Equipment Switcher Client"
-description = "Right clicking an equipment will now switch its position with the one you are wearing, no matter where you're equipping it from.".."\n\n".."Inventory, backpack, treasure chest or even Chester.".."\n".."It automatically equips identical weapons after breaking as well."
+name = "Proper Equipment Switching (DST Equipment Switcher Client)"
+description = "This client side mod works when joining other servers or hosting your own DST server with caves. Equipping another item in your inventory via keyboard shortcuts or right clicks will now automatically switch its \"saved slot\" with the one you were previously wearing."
 author = "Growth Mindset"
 forumthread = ""
 

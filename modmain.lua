@@ -130,10 +130,19 @@ local function ModOnEquip(inst, data)
     inst:DoTaskInTime(0, main_auto_switch, eslot, previous_equipped_item, removed_slot)
 end
 
-local function ModOnUnequip(_, data)
+local function check_for_unequip(_, item, eslot)
+    if not item:IsValid() or item:HasTag("projectile") and item:HasTag("NOCLICK") then
+        print("IsValid:", item:IsValid(), "HasTag(\"projectile\"):", item:HasTag("projectile"), "HasTag(\"NOCLICK\"):", item:HasTag("NOCLICK"))
+    end
+end
+
+local function ModOnUnequip(inst, data)
     if type(data) ~= "table" then return end
     local eslot = data.eslot
+    local item = latest_equip_items[eslot]
     latest_equip_items[eslot] = nil
+    if item == nil then return end -- to change?
+    inst:DoTaskInTime(0, check_for_unequip)
 end
 
 local function update_obtain_previous_inventory_fn_to_delay(_, get_slot, item)
