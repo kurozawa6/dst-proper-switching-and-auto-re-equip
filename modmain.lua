@@ -7,16 +7,16 @@ local latest_get_slots = {}
 local previous_saved_inventory = {}
 local saved_handequip_is_projectile = false
 
+local table = table --binding common/global utility stuff to locals for speed
+local type = type
+local next = next
+local print = print
+local pairs = pairs
+local ipairs = ipairs
+
 local function print_data(data) --for debugging
     for k, v in pairs(data) do
         print(k, v)
-    end
-end
-
-local function cancel_task(task)
-    if task ~= nil then
-        task:Cancel()
-        task = nil
     end
 end
 
@@ -39,6 +39,13 @@ end
 
 local function try_take_active_item_from_slot(inst, slot)
     do_invntry_act_on_slot_or_item_w_dmmode_false(inst, slot, inst.replica.inventory.TakeActiveItemFromAllOfSlot)
+end
+
+local function cancel_task(task)
+    if task ~= nil then
+        task:Cancel()
+        task = nil
+    end
 end
 
 local function main_auto_switch(inst, eslot, previous_equipped_item, removed_slot)
@@ -235,7 +242,11 @@ local function ModOnUnequip(inst, data)
     if eslot ~= EQUIPSLOTS.HANDS then return end -- to expound for compatibility with modded non-hand projectile equipment?
     local previous_is_projectile = saved_handequip_is_projectile -- needed as "projectile" tag is removed upon item removal i.e. being merged into another stack
     saved_handequip_is_projectile = false
-    inst:DoTaskInTime(0, main_auto_equip, item, eslot, previous_is_projectile)
+    if not TheWorld.ismastersim then
+        main_auto_equip(inst, item, eslot, previous_is_projectile)
+    else
+        inst:DoTaskInTime(0, main_auto_equip, item, eslot, previous_is_projectile) -- delay one frame if mastersim as mastersim unequip event is pushed before projectile thrown fn
+    end
 end
 
 local function initialize_inventory_and_equips(inst)
@@ -252,6 +263,13 @@ local function initialize_inventory_and_equips(inst)
     print("Hand Equipment is Projectile:", saved_handequip_is_projectile)
 end
 
+local function patch_OnRemoveFromEntity(self)
+    self.inst:RemoveEventCallback("equip", ModOnEquip)
+    self.inst:RemoveEventCallback("unequip", ModOnUnequip)
+    self.inst:RemoveEventCallback("itemget", ModOnItemGet)
+    self.inst:RemoveEventCallback("itemlose", ModOnItemLose)
+end
+
 ENV.AddComponentPostInit("playercontroller", function(self)
     if self.inst ~= ThePlayer then return end
     self.inst:DoTaskInTime(0, initialize_inventory_and_equips)
@@ -261,12 +279,9 @@ ENV.AddComponentPostInit("playercontroller", function(self)
     self.inst:ListenForEvent("itemget", ModOnItemGet)
     self.inst:ListenForEvent("itemlose", ModOnItemLose)
 
-    local OnRemoveFromEntity = self.OnRemoveFromEntity
-    self.OnRemoveFromEntity = function(self, ...)
-        self.inst:RemoveEventCallback("equip", ModOnEquip)
-        self.inst:RemoveEventCallback("unequip", ModOnUnequip)
-        self.inst:RemoveEventCallback("itemget", ModOnItemGet)
-        self.inst:RemoveEventCallback("itemlose", ModOnItemLose)
-        return OnRemoveFromEntity(self, ...)
+    local old_OnRemoveFromEntity = self.OnRemoveFromEntity
+    self.OnRemoveFromEntity = function(self_local, ...)
+        patch_OnRemoveFromEntity(self_local)
+        return old_OnRemoveFromEntity(self_local, ...)
     end
 end)
