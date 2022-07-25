@@ -1,9 +1,9 @@
 name = "Proper Equipment Switching (DST Equipment Switcher Client)"
-description = "This client side mod works when joining other servers or hosting your own DST server with caves. Equipping another item in your inventory via keyboard shortcuts or right clicks will now automatically switch its \"saved slot\" with the one you were previously wearing. \nHand equipment will now also auto re-equip or reload upon breaking/running out of ammo."
+description = "This client side mod works when joining other servers or hosting your own DST server with caves. Equipping another item in your inventory or backpack via keyboard shortcuts/right clicks will now automatically switch its \"saved slot\" with the one you were previously wearing. \nHand equipment will now also auto re-equip or reload upon breaking/running out of ammo."
 author = "Growth Mindset"
 forumthread = ""
 
-version = "1.1"
+version = "1.2"
 api_version = 10
 
 dont_starve_compatible = false
