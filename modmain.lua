@@ -399,10 +399,6 @@ local function RemoveEventCallbacksPlayer(inst)
     inst:RemoveEventCallback("unequip", OnUnequip)
 end
 
-local function patch_OnRemoveFromEntity(self)
-    RemoveEventCallbacksPlayer(self.inst)
-end
-
 local function initialize_player_and_backpack(inst)
     initialize_inventory_and_equips(inst)
     ListenForEventsPlayer(inst)
@@ -414,17 +410,13 @@ local function initialize_player_and_backpack(inst)
     end
 end
 
-local function Init(inst)
-    inst:DoTaskInTime(0, initialize_player_and_backpack)
-end
-
 ENV.AddComponentPostInit("playercontroller", function(self)
     if self.inst ~= ThePlayer then return end
-    Init(self.inst)
+    self.inst:DoTaskInTime(0, initialize_player_and_backpack)
 
     local old_OnRemoveFromEntity = self.OnRemoveFromEntity
     self.OnRemoveFromEntity = function(self_local, ...)
-        patch_OnRemoveFromEntity(self_local)
+        RemoveEventCallbacksPlayer(self_local.inst)
         return old_OnRemoveFromEntity(self_local, ...)
     end
 end)
