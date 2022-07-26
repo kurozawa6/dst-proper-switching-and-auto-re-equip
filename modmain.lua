@@ -1,6 +1,3 @@
-local ENV = env
-GLOBAL.setfenv(1, GLOBAL)
-
 local latest_equip_items = {}
 local latest_get_item_per_eslot = {}
 local latest_get_slot_per_eslot = {}
@@ -12,7 +9,7 @@ local saved_handequip_is_projectile = false
 
 local table = table --binding common/global utility stuff to locals for speed
 local type = type
-local next = next
+--local next = next -- next is defined as something else in the GLOBAL scope
 local print = print
 local pairs = pairs
 local ipairs = ipairs
@@ -24,7 +21,7 @@ local function print_data(data) --for debugging
 end
 
 local function do_invntry_act_on_slot_or_item_w_dmmode_false(slot_or_item, inventory_or_backpack, ActionFn)
-    local playercontroller = ThePlayer.components.playercontroller
+    local playercontroller = GLOBAL.ThePlayer.components.playercontroller
     local playercontroller_deploy_mode = playercontroller.deploy_mode --to study
     playercontroller.deploy_mode = false
     ActionFn(inventory_or_backpack, slot_or_item)
@@ -234,7 +231,7 @@ local function OnEquip(inst, data)
     end
     latest_equip_items[eslot] = latest_equipped_item
 
-    if eslot == EQUIPSLOTS.HANDS then
+    if eslot == GLOBAL.EQUIPSLOTS.HANDS then
         saved_handequip_is_projectile = latest_equipped_item:HasTag("projectile")
     end
 
@@ -244,8 +241,9 @@ local function OnEquip(inst, data)
             removed_slot = slot
             break
         end
-    end
-    if removed_slot == nil and next(previous_saved_backpack) ~= nil then
+    end 
+    --removed usage of next fn to check for empty tables because next RETURNS NIL FOR SOME REASON. DID THE DEVS ACTUALLY REDEFINE next AS SOMETHING ELSE IN THIS SCOPE??
+    if removed_slot == nil then --and previous_saved_backpack ~= nil then -- no need to check for previous_saved_backpack being nil because it defaults to {}
         for slot, item in pairs(previous_saved_backpack) do
             if item == latest_equipped_item then
                 removed_slot = slot
@@ -276,16 +274,15 @@ local function item_tables_to_check(inst)
     local inventory = inst.replica.inventory
     local tables_to_check = {}
     local active_item = inventory:GetActiveItem()
-    local active_item_mini_table = {_ = inventory:GetActiveItem()}
     if active_item ~= nil then
-        table.insert(tables_to_check, active_item_mini_table)
+        table.insert(tables_to_check, {_ = active_item})
     end
     local inventory_items_table = inventory:GetItems()
-    if next(inventory_items_table) ~= nil then
+    if inventory_items_table ~= nil then
         table.insert(tables_to_check, inventory_items_table)
     end
     local open_containers = inventory:GetOpenContainers()
-    if next(open_containers) ~= nil then
+    if open_containers ~= nil then
         for container in pairs(open_containers) do
             local container_replica = container and container.replica.container
             if container_replica then
@@ -361,12 +358,12 @@ local function OnUnequip(inst, data)
         end
     end
 
-    if eslot ~= EQUIPSLOTS.HANDS then --to expound for compatibility with modded non-hand projectile equipment?
+    if eslot ~= GLOBAL.EQUIPSLOTS.HANDS then --to expound for compatibility with modded non-hand projectile equipment?
         return
     end
     local previous_is_projectile = saved_handequip_is_projectile -- needed as "projectile" tag is removed upon item removal i.e. being merged into another stack
     saved_handequip_is_projectile = false
-    if not TheWorld.ismastersim then
+    if not GLOBAL.TheWorld.ismastersim then
         main_auto_equip(inst, item, eslot, previous_is_projectile)
     else
         inst:DoTaskInTime(0, main_auto_equip, item, eslot, previous_is_projectile) -- delay one frame if mastersim as mastersim unequip event is pushed before projectile thrown fn
@@ -377,7 +374,7 @@ local function initialize_inventory_and_equips(inst)
     local inventory = inst.replica.inventory
     previous_saved_inventory = inventory:GetItems()
     latest_equip_items = inventory:GetEquips()
-    local handequip = latest_equip_items[EQUIPSLOTS.HANDS]
+    local handequip = latest_equip_items[GLOBAL.EQUIPSLOTS.HANDS]
     if handequip ~= nil then
         saved_handequip_is_projectile = handequip:HasTag("projectile")
     end
@@ -410,8 +407,8 @@ local function initialize_player_and_backpack(inst)
     end
 end
 
-ENV.AddComponentPostInit("playercontroller", function(self)
-    if self.inst ~= ThePlayer then return end
+AddComponentPostInit("playercontroller", function(self)
+    if self.inst ~= GLOBAL.ThePlayer then return end
     self.inst:DoTaskInTime(0, initialize_player_and_backpack)
 
     local old_OnRemoveFromEntity = self.OnRemoveFromEntity
