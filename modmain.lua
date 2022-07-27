@@ -9,7 +9,7 @@ local saved_handequip_is_projectile = false
 
 local table = table --binding common/global utility stuff to locals for speed
 local type = type
---local next = next -- next is defined as something else in the GLOBAL scope
+--local next = next -- next doesn't exist in the modmain environment
 local print = print
 local pairs = pairs
 local ipairs = ipairs
@@ -77,7 +77,7 @@ end
 
 local function initialize_backpack(backpack_replica_container)
     previous_saved_backpack = backpack_replica_container:GetItems()
-    print_data(previous_saved_backpack)
+    --print_data(previous_saved_backpack)
 end
 
 local function update_backpack_on_get_fn_to_delay(_, get_slot, item)
@@ -131,7 +131,7 @@ local function main_auto_switch(inst, eslot, previous_equipped_item, destination
         return
     end
     local slot_to_take_from = latest_get_slot_per_eslot[eslot]
-    print("Move", previous_equipped_item, "from", slot_to_take_from, "to", destination_slot)
+    --print("Move", previous_equipped_item, "from", slot_to_take_from, "to", destination_slot)
     local obtained_is_in_backpack = latest_get_item_is_inbackpack_per_eslot[eslot]
 
     local active_item = nil
@@ -242,7 +242,7 @@ local function OnEquip(inst, data)
             break
         end
     end 
-    --removed usage of next fn to check for empty tables because next RETURNS NIL FOR SOME REASON. DID THE DEVS ACTUALLY REDEFINE next AS SOMETHING ELSE IN THIS SCOPE??
+    --removed usage of next fn to check for empty tables because next doesn't exist in the modmain environment
     if removed_slot == nil then --and previous_saved_backpack ~= nil then -- no need to check for previous_saved_backpack being nil because it defaults to {}
         for slot, item in pairs(previous_saved_backpack) do
             if item == latest_equipped_item then
@@ -378,8 +378,8 @@ local function initialize_inventory_and_equips(inst)
     if handequip ~= nil then
         saved_handequip_is_projectile = handequip:HasTag("projectile")
     end
-    print_data(previous_saved_inventory)
-    print_data(latest_equip_items)
+    --print_data(previous_saved_inventory)
+    --print_data(latest_equip_items)
 end
 
 local function ListenForEventsPlayer(inst)
