@@ -1,5 +1,5 @@
-name = "Auto Slot Switch & Re-Equip"
-description = "This client side mod works when joining other servers or hosting your own DST server with caves. Equipping another item from your inventory or backpack via keyboard shortcuts/right clicks will now automatically switch its \"saved slot\" with the one you were previously wearing. \nExtra weapons will now also auto re-equip (or reload for projectiles) upon breaking/running out of ammo."
+name = "Auto Switch Slot & Re-Equip Client Mod"
+description = "This client side mod works when joining other servers or hosting your own DST server with caves. Equipping another item from your inventory or backpack via keyboard shortcuts/right clicks will now automatically switch its \"saved slot\" with the one you were previously wearing. \n\nExtra weapons will now also auto re-equip (or reload for projectiles) upon breaking/running out of ammo."
 author = "Growth Mindset"
 forumthread = ""
 

@@ -1,4 +1,4 @@
-# Auto Slot Switch & Re-Equip
+# Auto Switch Slot & Re-Equip
 
 This mod is created for Don't Starve Together.
 
