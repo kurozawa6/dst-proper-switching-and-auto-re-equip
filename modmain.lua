@@ -161,9 +161,10 @@ local function main_auto_switch(inst, eslot, previous_equipped_item, destination
         refresh_common_variables()
         if inventory_destination == nil then
            cancel_task(current_task)
-        elseif not previous_equipped_item:IsValid() or
-                previous_equipped_item ~= active_item or
-                previous_equipped_item == item_on_dest_slot then --or item_on_dest_slot ~= nil then
+        elseif active_item == nil or --or item_on_dest_slot ~= nil then
+               active_item ~= previous_equipped_item or
+               previous_equipped_item == item_on_dest_slot or
+               not previous_equipped_item:IsValid() then
             cancel_task(current_task)
             --print("Put Task Cancelled with the following conditions:")
             --print(not previous_equipped_item:IsValid(), "IsNotValid", previous_equipped_item ~= active_item,
@@ -196,6 +197,7 @@ local function main_auto_switch(inst, eslot, previous_equipped_item, destination
             cancel_task(current_task)
         elseif active_item ~= nil and
                active_item == previous_equipped_item and
+               previous_equipped_item ~= item_on_dest_slot and
                previous_equipped_item:IsValid() then
             if item_on_dest_slot == nil then
                 try_put_active_item_to_slot(destination_slot, inventory_destination)
