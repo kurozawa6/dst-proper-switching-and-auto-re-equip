@@ -21,11 +21,11 @@ local function print_data(data) --for debugging
 end
 
 local function do_invntry_act_on_slot_or_item_w_dmmode_false(slot_or_item, inventory_or_backpack, ActionFn)
-    local playercontroller = GLOBAL.ThePlayer.components.playercontroller
-    local playercontroller_deploy_mode = playercontroller.deploy_mode --to study
-    playercontroller.deploy_mode = false
+    --local playercontroller = GLOBAL.ThePlayer.components.playercontroller
+    --local playercontroller_deploy_mode = playercontroller.deploy_mode --to study
+    --playercontroller.deploy_mode = false
     ActionFn(inventory_or_backpack, slot_or_item)
-    playercontroller.deploy_mode = playercontroller_deploy_mode
+    --playercontroller.deploy_mode = playercontroller_deploy_mode
 end
 
 local function try_put_active_item_to_slot(slot, inventory_or_backpack)
@@ -219,25 +219,7 @@ local function main_auto_switch(inst, eslot, previous_equipped_item, destination
         end
     end
 
-    refresh_common_variables()
-    if not obtained_is_in_backpack then
-        inventory_source = inst.replica.inventory
-    else
-        local backpack = inst.replica.inventory:GetOverflowContainer()
-        if backpack ~= nil then
-            inventory_source = backpack.inst.replica.container
-        end
-    end
-    if inventory_source ~= nil then
-        item_on_slot_to_take = inventory_source:GetItemInSlot(slot_to_take_from)
-    end
-    if previous_equipped_item:IsValid() and
-       previous_equipped_item ~= item_on_dest_slot and
-       item_on_slot_to_take ~= nil and
-       previous_equipped_item == item_on_slot_to_take then
-        try_take_active_item_from_slot(slot_to_take_from, inventory_source)
-    end
-
+    take_prompt()
     current_task = inst:DoPeriodicTask(0, take_prompt)
 end
 
