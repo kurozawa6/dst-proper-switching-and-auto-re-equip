@@ -120,7 +120,10 @@ end
 local function cancel_task(task)
     if task ~= nil then
         task:Cancel()
-        task = nil
+        --task = nil -- oopsie
+        --print("A periodic task has been cancelled successfully.")
+    else
+        --print("A nil periodic task has been tried to cancel")
     end
 end
 
@@ -157,15 +160,17 @@ local function main_auto_switch(inst, eslot, previous_equipped_item, destination
     local item_on_slot_to_take = nil
 
     local current_task = nil
+    local current_second_task = nil --needed as canceling a task right before changing its value apparently sets the task's later value back to the previous, yielding an infinite loop (as second task value is no longer referenced and cannot be cancelled)
     local function put_prompt()
+        --print("initiating put_prompt() periodic task... [ASSRE]")
         refresh_common_variables()
         if inventory_destination == nil then
-           cancel_task(current_task)
+           cancel_task(current_second_task)
         elseif active_item == nil or --or item_on_dest_slot ~= nil then
                active_item ~= previous_equipped_item or
                previous_equipped_item == item_on_dest_slot or
                not previous_equipped_item:IsValid() then
-            cancel_task(current_task)
+            cancel_task(current_second_task)
             --print("Put Task Cancelled with the following conditions:")
             --print(not previous_equipped_item:IsValid(), "IsNotValid", previous_equipped_item ~= active_item,
                     --previous_equipped_item, "~=", active_item, previous_equipped_item == item_on_dest_slot,
@@ -175,10 +180,11 @@ local function main_auto_switch(inst, eslot, previous_equipped_item, destination
         elseif item_on_dest_slot ~= nil then --and previous_equipped_item ~= item_on_dest_slot then
             try_swap_active_item_with_slot(destination_slot, inventory_destination)
         else
-            cancel_task(current_task)
+            cancel_task(current_second_task)
         end
     end
     local function take_prompt()
+        --print("initiating take_prompt() periodic task... [ASSRE]")
         refresh_common_variables()
         if not obtained_is_in_backpack then
             inventory_source = inst.replica.inventory
@@ -205,7 +211,7 @@ local function main_auto_switch(inst, eslot, previous_equipped_item, destination
                 try_swap_active_item_with_slot(destination_slot, inventory_destination)
             end
             cancel_task(current_task)
-            current_task = inst:DoPeriodicTask(0, put_prompt)
+            current_second_task = inst:DoPeriodicTask(0, put_prompt)
         elseif not previous_equipped_item:IsValid() or
                    previous_equipped_item ~= item_on_slot_to_take or
                    previous_equipped_item == item_on_dest_slot or --or item_on_dest_slot ~= nil then
