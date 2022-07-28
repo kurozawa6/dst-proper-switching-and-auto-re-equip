@@ -197,6 +197,11 @@ local function main_auto_switch(inst, eslot, previous_equipped_item, destination
         elseif active_item ~= nil and
                active_item == previous_equipped_item and
                previous_equipped_item:IsValid() then
+            if item_on_dest_slot == nil then
+                try_put_active_item_to_slot(destination_slot, inventory_destination)
+            else
+                try_swap_active_item_with_slot(destination_slot, inventory_destination)
+            end
             cancel_task(current_task)
             current_task = inst:DoPeriodicTask(0, put_prompt)
         elseif not previous_equipped_item:IsValid() or
@@ -212,6 +217,25 @@ local function main_auto_switch(inst, eslot, previous_equipped_item, destination
         else
             cancel_task(current_task)
         end
+    end
+
+    refresh_common_variables()
+    if not obtained_is_in_backpack then
+        inventory_source = inst.replica.inventory
+    else
+        local backpack = inst.replica.inventory:GetOverflowContainer()
+        if backpack ~= nil then
+            inventory_source = backpack.inst.replica.container
+        end
+    end
+    if inventory_source ~= nil then
+        item_on_slot_to_take = inventory_source:GetItemInSlot(slot_to_take_from)
+    end
+    if previous_equipped_item:IsValid() and
+       previous_equipped_item ~= item_on_dest_slot and
+       item_on_slot_to_take ~= nil and
+       previous_equipped_item == item_on_slot_to_take then
+        try_take_active_item_from_slot(slot_to_take_from, inventory_source)
     end
 
     current_task = inst:DoPeriodicTask(0, take_prompt)
