@@ -1,6 +1,6 @@
 # Auto Switch Slot & Re-Equip
 
-This mod is created for Don't Starve Together and can be found in the [Steam Workshop here](https://steamcommunity.com/sharedfiles/filedetails/?id=2829037969)..
+This mod is created for Don't Starve Together and can be found in the [Steam Workshop here](https://steamcommunity.com/sharedfiles/filedetails/?id=2841310635).
 
 It makes equipping another item from your inventory or backpack via keyboard shortcuts/right clicks automatically switch its "saved slot" with the one you were previously wearing.
 
