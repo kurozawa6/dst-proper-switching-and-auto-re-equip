@@ -3,7 +3,7 @@ description = "This client side mod works when joining other servers or hosting 
 author = "Growth Mindset"
 forumthread = ""
 
-version = "1.1"
+version = "1.2"
 api_version = 10
 
 dont_starve_compatible = false
