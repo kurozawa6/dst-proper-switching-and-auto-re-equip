@@ -1,9 +1,9 @@
-local latest_equip_items = {}
-local latest_get_item_per_eslot = {}
-local latest_get_slot_per_eslot = {}
-local latest_get_item_is_inbackpack_per_eslot = {}
-local previous_saved_inventory = {}
-local previous_saved_backpack = {}
+local saved_equip_items = {}
+local saved_get_item_per_eslot = {}
+local saved_get_slot_per_eslot = {}
+local saved_get_item_is_inbackpack_per_eslot = {}
+local saved_inventory_items = {}
+local saved_backpack_items = {}
 local saved_backpack_replica_container = nil
 local saved_handequip_is_projectile = false
 
@@ -49,7 +49,7 @@ local function try_use_item_on_self(item, inventory)
 end
 
 local function update_inventory_on_get_fn_to_delay(_, get_slot, item)
-    previous_saved_inventory[get_slot] = item
+    saved_inventory_items[get_slot] = item
 end
 
 local function InventoryOnItemGet(inst, data)
@@ -58,16 +58,16 @@ local function InventoryOnItemGet(inst, data)
     local equippable = item.replica.equippable
     if equippable ~= nil then
         local eslot = equippable:EquipSlot()
-        latest_get_item_per_eslot[eslot] = item
-        latest_get_slot_per_eslot[eslot] = get_slot
-        latest_get_item_is_inbackpack_per_eslot[eslot] = false
+        saved_get_item_per_eslot[eslot] = item
+        saved_get_slot_per_eslot[eslot] = get_slot
+        saved_get_item_is_inbackpack_per_eslot[eslot] = false
     end
     inst:DoTaskInTime(0, update_inventory_on_get_fn_to_delay, get_slot, item)
     --print("InventoryOnItemGet data:", item, get_slot, eslot, "Finished Updating Saved Inventory")
 end
 
 local function update_inventory_on_remove_fn_to_delay(_, removed_slot)
-    previous_saved_inventory[removed_slot] = nil
+    saved_inventory_items[removed_slot] = nil
 end
 
 local function InventoryOnItemLose(inst, data) -- Huge mistake on hindsight: "IMPORTANT EVENT FUNCTION THAT IS CALLED ONLY WHEN NEEDED! USE THIS!"
@@ -76,12 +76,12 @@ local function InventoryOnItemLose(inst, data) -- Huge mistake on hindsight: "IM
 end
 
 local function initialize_backpack(backpack_replica_container)
-    previous_saved_backpack = backpack_replica_container:GetItems()
-    --print_data(previous_saved_backpack)
+    saved_backpack_items = backpack_replica_container:GetItems()
+    --print_data(saved_backpack_items)
 end
 
 local function update_backpack_on_get_fn_to_delay(_, get_slot, item)
-    previous_saved_backpack[get_slot] = item
+    saved_backpack_items[get_slot] = item
 end
 
 local function BackpackOnItemGet(inst, data)
@@ -90,16 +90,16 @@ local function BackpackOnItemGet(inst, data)
     local equippable = item.replica.equippable
     if equippable ~= nil then
         local eslot = equippable:EquipSlot()
-        latest_get_item_per_eslot[eslot] = item
-        latest_get_slot_per_eslot[eslot] = get_slot
-        latest_get_item_is_inbackpack_per_eslot[eslot] = true
+        saved_get_item_per_eslot[eslot] = item
+        saved_get_slot_per_eslot[eslot] = get_slot
+        saved_get_item_is_inbackpack_per_eslot[eslot] = true
     end
     inst:DoTaskInTime(0, update_backpack_on_get_fn_to_delay, get_slot, item)
     --print("InventoryOnItemGet data:", item, get_slot, eslot, "Finished Updating Saved Backpack")
 end
 
 local function update_backpack_on_remove_fn_to_delay(_, removed_slot)
-    previous_saved_backpack[removed_slot] = nil
+    saved_backpack_items[removed_slot] = nil
 end
 
 local function BackpackOnItemLose(inst, data)
@@ -128,14 +128,14 @@ local function cancel_task(task)
 end
 
 local function main_auto_switch(inst, eslot, previous_equipped_item, destination_slot, equipped_is_from_backpack)
-    local obtained_item = latest_get_item_per_eslot[eslot]
+    local obtained_item = saved_get_item_per_eslot[eslot]
 
     if not (previous_equipped_item == obtained_item and previous_equipped_item and obtained_item) then
         return
     end
-    local slot_to_take_from = latest_get_slot_per_eslot[eslot]
+    local slot_to_take_from = saved_get_slot_per_eslot[eslot]
     --print("Move", previous_equipped_item, "from", slot_to_take_from, "to", destination_slot)
-    local obtained_is_in_backpack = latest_get_item_is_inbackpack_per_eslot[eslot]
+    local obtained_is_in_backpack = saved_get_item_is_inbackpack_per_eslot[eslot]
 
     local active_item = nil
     local inventory_destination = nil
@@ -240,16 +240,16 @@ local function OnEquip(inst, data)
     local previous_equipped_item = nil
     local removed_slot = nil
     local is_from_backpack = false
-    if latest_equip_items[eslot] then
-        previous_equipped_item = latest_equip_items[eslot]
+    if saved_equip_items[eslot] then
+        previous_equipped_item = saved_equip_items[eslot]
     end
-    latest_equip_items[eslot] = latest_equipped_item
+    saved_equip_items[eslot] = latest_equipped_item
 
     if eslot == GLOBAL.EQUIPSLOTS.HANDS then
         saved_handequip_is_projectile = latest_equipped_item:HasTag("projectile")
     end
 
-    for slot, item in pairs(previous_saved_inventory) do
+    for slot, item in pairs(saved_inventory_items) do
         --print(slot, item) --verbose, for debugging only
         if item == latest_equipped_item then -- if the latest equipped item is found on the previous saved inventory, then get its slot as destination slot
             removed_slot = slot
@@ -257,8 +257,8 @@ local function OnEquip(inst, data)
         end
     end 
     --removed usage of next fn to check for empty tables because next doesn't exist in the modmain environment
-    if removed_slot == nil then --and previous_saved_backpack ~= nil then -- no need to check for previous_saved_backpack being nil because it defaults to {}
-        for slot, item in pairs(previous_saved_backpack) do
+    if removed_slot == nil then --and saved_backpack_items ~= nil then -- no need to check for saved_backpack_items being nil because it defaults to {}
+        for slot, item in pairs(saved_backpack_items) do
             if item == latest_equipped_item then
                 removed_slot = slot
                 is_from_backpack = true
@@ -360,14 +360,14 @@ local function OnUnequip(inst, data)
         return
     end
     local eslot = data.eslot
-    local item = latest_equip_items[eslot]
-    latest_equip_items[eslot] = nil
+    local item = saved_equip_items[eslot]
+    saved_equip_items[eslot] = nil
 
     if item == nil then
         return
     end
     if item:HasTag("backpack") then
-        previous_saved_backpack = {}
+        saved_backpack_items = {}
         if saved_backpack_replica_container ~= nil then
             RemoveEventCallbacksBackpack(saved_backpack_replica_container.inst)
         end
@@ -387,14 +387,14 @@ end
 
 local function initialize_inventory_and_equips(inst)
     local inventory = inst.replica.inventory
-    previous_saved_inventory = inventory:GetItems()
-    latest_equip_items = inventory:GetEquips()
-    local handequip = latest_equip_items[GLOBAL.EQUIPSLOTS.HANDS]
+    saved_inventory_items = inventory:GetItems()
+    saved_equip_items = inventory:GetEquips()
+    local handequip = saved_equip_items[GLOBAL.EQUIPSLOTS.HANDS]
     if handequip ~= nil then
         saved_handequip_is_projectile = handequip:HasTag("projectile")
     end
-    --print_data(previous_saved_inventory)
-    --print_data(latest_equip_items)
+    --print_data(saved_inventory_items)
+    --print_data(saved_equip_items)
 end
 
 local function ListenForEventsPlayer(inst)
