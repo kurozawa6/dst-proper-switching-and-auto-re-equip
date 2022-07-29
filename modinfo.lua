@@ -1,5 +1,16 @@
 name = "Auto Switch Slot & Re-Equip Client Mod"
-description = "This client side mod works when joining other servers or hosting your own DST server with caves. Equipping another item from your inventory or backpack via keyboard shortcuts/right clicks will now automatically switch its \"saved slot\" with the one you were previously wearing. \n\nExtra weapons will now also auto re-equip (or reload for projectiles) upon breaking/running out of ammo."
+description =
+[[
+This client side mod works when joining other servers or hosting your own DST server with caves. Equipping another item from your inventory or backpack via keyboard shortcuts/right clicks will now automatically switch its "saved slot" with the one you were previously wearing.
+
+Extra weapons will now also auto re-equip (or reload for projectiles) upon breaking/running out of ammo.
+
+Latest Patch Notes:
++Slightly improved slot switching speed by removing initial frame delay
++Fixed all known infinite periodic task bugs when switching and manipulating mouse-held equips while server is Paused
++Fixed all known saved inventory desync bugs when managing inventory while server is Paused
+]]
+
 author = "Growth Mindset"
 forumthread = ""
 

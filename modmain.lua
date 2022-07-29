@@ -55,31 +55,20 @@ local function cancel_task(task)
     if task ~= nil then
         task:Cancel()
         --task = nil -- oopsie
-        print("A periodic task has been cancelled successfully.")
+        --print("A periodic task has been cancelled successfully.")
     else
-        print("A nil periodic task has been tried to cancel")
+        --print("A nil periodic task has been tried to cancel")
     end
 end
 
-local function onitemget_autoswitch(inst, eslot, obtained_item, slot_to_take_from, obtained_is_in_backpack)
-    local previous_equipped_item = saved_replaced_item_per_eslot[eslot]
-    saved_replaced_item_per_eslot[eslot] = nil
-    print(obtained_item, previous_equipped_item)
-    if not (previous_equipped_item == obtained_item and previous_equipped_item and obtained_item) then
-        return
-    end
-
-    print("initializing onitemget_autoswitch [ASSRE]")
-    local destination_slot = saved_removed_slot_per_eslot[eslot]
-    print("Move", previous_equipped_item, "from", slot_to_take_from, "to", destination_slot)
-    local equipped_is_from_backpack = saved_removed_slot_is_inbackpack_per_eslot[eslot]
+local function auto_switch_slot(inst, obtained_item, slot_to_take_from, destination_slot, obtained_is_in_backpack, destination_is_in_backpack)
     local active_item = nil
     local inventory_destination = nil
     local item_on_dest_slot = nil
     local function refresh_common_variables() --refreshes active_item, inventory_destination, and item_on_dest_slot
         active_item = inst.replica.inventory:GetActiveItem()
         inventory_destination = nil
-        if not equipped_is_from_backpack then
+        if not destination_is_in_backpack then
             inventory_destination = inst.replica.inventory
         else
             local backpack = inst.replica.inventory:GetOverflowContainer()
@@ -98,29 +87,25 @@ local function onitemget_autoswitch(inst, eslot, obtained_item, slot_to_take_fro
     local current_task = nil
     local current_second_task = nil --needed as canceling a task right before changing its value apparently sets the task's later value back to the previous, yielding an infinite loop (as second task value is no longer referenced and cannot be cancelled)
     local function put_prompt()
-        print("initiating put_prompt() periodic task... [ASSRE]")
+        --print("initiating put_prompt() periodic task... [ASSRE]")
         refresh_common_variables()
         if inventory_destination == nil then
            cancel_task(current_second_task)
         elseif active_item == nil or --or item_on_dest_slot ~= nil then
-               active_item ~= previous_equipped_item or
-               previous_equipped_item == item_on_dest_slot or
-               not previous_equipped_item:IsValid() then
+               active_item ~= obtained_item or
+               obtained_item == item_on_dest_slot or
+               not obtained_item:IsValid() then
             cancel_task(current_second_task)
-            --print("Put Task Cancelled with the following conditions:")
-            --print(not previous_equipped_item:IsValid(), "IsNotValid", previous_equipped_item ~= active_item,
-                    --previous_equipped_item, "~=", active_item, previous_equipped_item == item_on_dest_slot,
-                    --previous_equipped_item, "==", item_on_dest_slot)
         elseif item_on_dest_slot == nil then
             try_put_active_item_to_slot(destination_slot, inventory_destination)
-        elseif item_on_dest_slot ~= nil then --and previous_equipped_item ~= item_on_dest_slot then
+        elseif item_on_dest_slot ~= nil then --and obtained_item ~= item_on_dest_slot then
             try_swap_active_item_with_slot(destination_slot, inventory_destination)
         else
             cancel_task(current_second_task)
         end
     end
     local function take_prompt()
-        print("initiating take_prompt() periodic task... [ASSRE]")
+        --print("initiating take_prompt() periodic task... [ASSRE]")
         refresh_common_variables()
         if not obtained_is_in_backpack then
             inventory_source = inst.replica.inventory
@@ -138,9 +123,9 @@ local function onitemget_autoswitch(inst, eslot, obtained_item, slot_to_take_fro
         elseif inventory_source == nil then
             cancel_task(current_task)
         elseif active_item ~= nil and
-               active_item == previous_equipped_item and
-               previous_equipped_item ~= item_on_dest_slot and
-               previous_equipped_item:IsValid() then
+               active_item == obtained_item and
+               obtained_item ~= item_on_dest_slot and
+               obtained_item:IsValid() then
             if item_on_dest_slot == nil then
                 try_put_active_item_to_slot(destination_slot, inventory_destination)
             else
@@ -148,15 +133,12 @@ local function onitemget_autoswitch(inst, eslot, obtained_item, slot_to_take_fro
             end
             cancel_task(current_task)
             current_second_task = inst:DoPeriodicTask(0, put_prompt)
-        elseif not previous_equipped_item:IsValid() or
-                   previous_equipped_item ~= item_on_slot_to_take or
-                   previous_equipped_item == item_on_dest_slot or --or item_on_dest_slot ~= nil then
+        elseif not obtained_item:IsValid() or
+                   obtained_item ~= item_on_slot_to_take or
+                   obtained_item == item_on_dest_slot or --or item_on_dest_slot ~= nil then
                    item_on_slot_to_take == nil then
             cancel_task(current_task)
-            --print("Task Cancelled with the following conditions:")
-            --print(not previous_equipped_item:IsValid(), previous_equipped_item ~= item_on_slot_to_take, previous_equipped_item, item_on_slot_to_take,
-                    --previous_equipped_item == item_on_dest_slot, item_on_slot_to_take == nil)
-        elseif previous_equipped_item == item_on_slot_to_take then
+        elseif obtained_item == item_on_slot_to_take then
             try_take_active_item_from_slot(slot_to_take_from, inventory_source)
         else
             cancel_task(current_task)
@@ -167,12 +149,31 @@ local function onitemget_autoswitch(inst, eslot, obtained_item, slot_to_take_fro
     current_task = inst:DoPeriodicTask(0, take_prompt)
 end
 
-local function update_inventory_on_get_fn_to_delay(_, get_slot, item)
-    saved_inventory_items[get_slot] = item
+local function onitemget_auto_ss(inst, eslot, obtained_item, slot_to_take_from, obtained_is_in_backpack)
+    local previous_equipped_item = saved_replaced_item_per_eslot[eslot]
+    saved_replaced_item_per_eslot[eslot] = nil
+    --print(obtained_item, previous_equipped_item)
+    if not (previous_equipped_item == obtained_item and previous_equipped_item and obtained_item) then
+        return
+    end
+
+    --print("initializing onitemget_auto_ss [ASSRE]")
+    local destination_slot = saved_removed_slot_per_eslot[eslot]
+    --print("Move", obtained_item, "from", slot_to_take_from, "to", destination_slot)
+    local destination_is_in_backpack = saved_removed_slot_is_inbackpack_per_eslot[eslot]
+
+    auto_switch_slot(inst, obtained_item, slot_to_take_from, destination_slot, obtained_is_in_backpack, destination_is_in_backpack)
+end
+
+local function update_inventory_on_get_fn_to_delay(inst, get_slot, get_item)
+    local item_in_slot = inst.replica.inventory:GetItemInSlot(get_slot)
+    if item_in_slot == get_item then
+        saved_inventory_items[get_slot] = item_in_slot
+        --print("saved_inventory_items[", get_slot, "]:", saved_inventory_items[get_slot])
+    end
 end
 
 local function InventoryOnItemGet(inst, data)
-    print("Item Get [ASSRE]")
     local item = data.item
     local get_slot = data.slot
     local equippable = item.replica.equippable
@@ -184,14 +185,20 @@ local function InventoryOnItemGet(inst, data)
         saved_get_item_is_inbackpack_per_eslot[eslot] = false
     end
     if eslot ~= nil then
-        onitemget_autoswitch(inst, eslot, item, get_slot, false)
+        onitemget_auto_ss(inst, eslot, item, get_slot, false)
     end
     inst:DoTaskInTime(0, update_inventory_on_get_fn_to_delay, get_slot, item)
-    --print("InventoryOnItemGet data:", item, get_slot, eslot, "Finished Updating Saved Inventory")
 end
 
-local function update_backpack_on_get_fn_to_delay(_, get_slot, item)
-    saved_backpack_items[get_slot] = item
+local function update_backpack_on_get_fn_to_delay(_, get_slot, get_item)
+    if saved_backpack_replica_container == nil then
+        return
+    end
+    local item_in_slot = saved_backpack_replica_container:GetItemInSlot(get_slot)
+    if item_in_slot == get_item then
+        saved_backpack_items[get_slot] = get_item
+        --print("saved_backpack_items[", get_slot, "]:", saved_backpack_items[get_slot])
+    end
 end
 
 local function BackpackOnItemGet(inst, data)
@@ -206,14 +213,17 @@ local function BackpackOnItemGet(inst, data)
         saved_get_item_is_inbackpack_per_eslot[eslot] = true
     end
     if eslot ~= nil then
-        GLOBAL.ThePlayer:DoTaskInTime(0, onitemget_autoswitch, eslot, item, get_slot, true)
+        onitemget_auto_ss(GLOBAL.ThePlayer, eslot, item, get_slot, true)
     end
     inst:DoTaskInTime(0, update_backpack_on_get_fn_to_delay, get_slot, item)
-    --print("InventoryOnItemGet data:", item, get_slot, eslot, "Finished Updating Saved Backpack")
 end
 
-local function update_inventory_on_remove_fn_to_delay(_, removed_slot)
-    saved_inventory_items[removed_slot] = nil
+local function update_inventory_on_remove_fn_to_delay(inst, removed_slot)
+    local item_in_slot = inst.replica.inventory:GetItemInSlot(removed_slot)
+    if item_in_slot == nil then
+        saved_inventory_items[removed_slot] = nil
+        --print("saved_inventory_items[", removed_slot, "]:", saved_inventory_items[removed_slot])
+    end
 end
 
 local function InventoryOnItemLose(inst, data) -- Huge mistake on hindsight: "IMPORTANT EVENT FUNCTION THAT IS CALLED ONLY WHEN NEEDED! USE THIS!"
@@ -222,7 +232,14 @@ local function InventoryOnItemLose(inst, data) -- Huge mistake on hindsight: "IM
 end
 
 local function update_backpack_on_remove_fn_to_delay(_, removed_slot)
-    saved_backpack_items[removed_slot] = nil
+    if saved_backpack_replica_container == nil then
+        return
+    end
+    local item_in_slot = saved_backpack_replica_container:GetItemInSlot(removed_slot)
+    if item_in_slot == nil then
+        saved_backpack_items[removed_slot] = nil
+        --print("saved_backpack_items[", removed_slot, "]:", saved_backpack_items[removed_slot])
+    end
 end
 
 local function BackpackOnItemLose(inst, data)
@@ -245,114 +262,21 @@ local function RemoveEventCallbacksBackpack(inst)
     inst:RemoveEventCallback("itemlose", BackpackOnItemLose)
 end
 
-local function onequip_auto_switch(inst, eslot, previous_equipped_item, destination_slot, equipped_is_from_backpack)
+local function onequip_auto_ss(inst, eslot, previous_equipped_item, destination_slot, destination_is_in_backpack)
     local obtained_item = saved_get_item_per_eslot[eslot]
 
     if not (previous_equipped_item == obtained_item and previous_equipped_item and obtained_item) then
         return
     end
     saved_replaced_item_per_eslot[eslot] = nil
-    print("initializing onequip_autoswitch [ASSRE]")
     local slot_to_take_from = saved_get_slot_per_eslot[eslot]
-    print("Move", previous_equipped_item, "from", slot_to_take_from, "to", destination_slot)
+    --print("Move", previous_equipped_item, "from", slot_to_take_from, "to", destination_slot)
     local obtained_is_in_backpack = saved_get_item_is_inbackpack_per_eslot[eslot]
 
-    local active_item = nil
-    local inventory_destination = nil
-    local item_on_dest_slot = nil
-    local function refresh_common_variables() --refreshes active_item, inventory_destination, and item_on_dest_slot
-        active_item = inst.replica.inventory:GetActiveItem()
-        inventory_destination = nil
-        if not equipped_is_from_backpack then
-            inventory_destination = inst.replica.inventory
-        else
-            local backpack = inst.replica.inventory:GetOverflowContainer()
-            if backpack ~= nil then
-                inventory_destination = backpack.inst.replica.container
-            end
-        end
-        item_on_dest_slot = nil
-        if inventory_destination ~= nil then
-            item_on_dest_slot = inventory_destination:GetItemInSlot(destination_slot)
-        end
-    end
-    local inventory_source = nil
-    local item_on_slot_to_take = nil
-
-    local current_task = nil
-    local current_second_task = nil --needed as canceling a task right before changing its value apparently sets the task's later value back to the previous, yielding an infinite loop (as second task value is no longer referenced and cannot be cancelled)
-    local function put_prompt()
-        print("initiating put_prompt() periodic task... [ASSRE]")
-        refresh_common_variables()
-        if inventory_destination == nil then
-           cancel_task(current_second_task)
-        elseif active_item == nil or --or item_on_dest_slot ~= nil then
-               active_item ~= previous_equipped_item or
-               previous_equipped_item == item_on_dest_slot or
-               not previous_equipped_item:IsValid() then
-            cancel_task(current_second_task)
-            --print("Put Task Cancelled with the following conditions:")
-            --print(not previous_equipped_item:IsValid(), "IsNotValid", previous_equipped_item ~= active_item,
-                    --previous_equipped_item, "~=", active_item, previous_equipped_item == item_on_dest_slot,
-                    --previous_equipped_item, "==", item_on_dest_slot)
-        elseif item_on_dest_slot == nil then
-            try_put_active_item_to_slot(destination_slot, inventory_destination)
-        elseif item_on_dest_slot ~= nil then --and previous_equipped_item ~= item_on_dest_slot then
-            try_swap_active_item_with_slot(destination_slot, inventory_destination)
-        else
-            cancel_task(current_second_task)
-        end
-    end
-    local function take_prompt()
-        print("initiating take_prompt() periodic task... [ASSRE]")
-        refresh_common_variables()
-        if not obtained_is_in_backpack then
-            inventory_source = inst.replica.inventory
-        else
-            local backpack = inst.replica.inventory:GetOverflowContainer()
-            if backpack ~= nil then
-                inventory_source = backpack.inst.replica.container
-            end
-        end
-        if inventory_source ~= nil then
-            item_on_slot_to_take = inventory_source:GetItemInSlot(slot_to_take_from)
-        end
-        if inventory_destination == nil then
-            cancel_task(current_task)
-        elseif inventory_source == nil then
-            cancel_task(current_task)
-        elseif active_item ~= nil and
-               active_item == previous_equipped_item and
-               previous_equipped_item ~= item_on_dest_slot and
-               previous_equipped_item:IsValid() then
-            if item_on_dest_slot == nil then
-                try_put_active_item_to_slot(destination_slot, inventory_destination)
-            else
-                try_swap_active_item_with_slot(destination_slot, inventory_destination)
-            end
-            cancel_task(current_task)
-            current_second_task = inst:DoPeriodicTask(0, put_prompt)
-        elseif not previous_equipped_item:IsValid() or
-                   previous_equipped_item ~= item_on_slot_to_take or
-                   previous_equipped_item == item_on_dest_slot or --or item_on_dest_slot ~= nil then
-                   item_on_slot_to_take == nil then
-            cancel_task(current_task)
-            --print("Task Cancelled with the following conditions:")
-            --print(not previous_equipped_item:IsValid(), previous_equipped_item ~= item_on_slot_to_take, previous_equipped_item, item_on_slot_to_take,
-                    --previous_equipped_item == item_on_dest_slot, item_on_slot_to_take == nil)
-        elseif previous_equipped_item == item_on_slot_to_take then
-            try_take_active_item_from_slot(slot_to_take_from, inventory_source)
-        else
-            cancel_task(current_task)
-        end
-    end
-
-    take_prompt()
-    current_task = inst:DoPeriodicTask(0, take_prompt)
+    auto_switch_slot(inst, obtained_item, slot_to_take_from, destination_slot, obtained_is_in_backpack, destination_is_in_backpack)
 end
 
 local function OnEquip(inst, data)
-    print("Item EQUIP [ASSRE]")
     if not (type(data) == "table" and data.eslot and data.item) then
         return
     end
@@ -375,7 +299,7 @@ local function OnEquip(inst, data)
             removed_slot = slot
             break
         end
-    end 
+    end
     --removed usage of next fn to check for empty tables because next doesn't exist in the modmain environment
     if removed_slot == nil then --and saved_backpack_items ~= nil then -- no need to check for saved_backpack_items being nil because it defaults to {}
         for slot, item in pairs(saved_backpack_items) do
@@ -400,12 +324,14 @@ local function OnEquip(inst, data)
 
     saved_equip_items[eslot] = latest_equipped_item
     if removed_slot == nil then
-        return
+        saved_replaced_item_per_eslot[eslot] = nil
+        saved_removed_slot_per_eslot[eslot] = nil
+    else
+        saved_replaced_item_per_eslot[eslot] = previous_equipped_item
+        saved_removed_slot_per_eslot[eslot] = removed_slot
+        saved_removed_slot_is_inbackpack_per_eslot[eslot] = is_from_backpack
+        onequip_auto_ss(inst, eslot, previous_equipped_item, removed_slot, is_from_backpack)
     end
-    saved_replaced_item_per_eslot[eslot] = previous_equipped_item
-    saved_removed_slot_per_eslot[eslot] = removed_slot
-    saved_removed_slot_is_inbackpack_per_eslot[eslot] = is_from_backpack
-    onequip_auto_switch(inst, eslot, previous_equipped_item, removed_slot, is_from_backpack)
 end
 
 local function item_tables_to_check(inst)
@@ -494,6 +420,7 @@ local function OnUnequip(inst, data)
         saved_backpack_items = {}
         if saved_backpack_replica_container ~= nil then
             RemoveEventCallbacksBackpack(saved_backpack_replica_container.inst)
+            saved_backpack_replica_container = nil
         end
     end
 
