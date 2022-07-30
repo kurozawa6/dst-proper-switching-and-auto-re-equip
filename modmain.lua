@@ -285,7 +285,7 @@ local function OnEquip(inst, data)
     local previous_equipped_item = nil
     local removed_slot = nil
     local is_from_backpack = false
-    if saved_equip_items[eslot] then
+    if saved_equip_items[eslot] ~= nil then
         previous_equipped_item = saved_equip_items[eslot]
     end
 
@@ -432,7 +432,7 @@ local function OnUnequip(inst, data)
     if not GLOBAL.TheWorld.ismastersim then
         main_auto_equip(inst, item, eslot, previous_is_projectile)
     else
-        inst:DoTaskInTime(0, main_auto_equip, item, eslot, previous_is_projectile) -- delay one frame if mastersim as mastersim unequip event is pushed before projectile thrown fn
+        inst:DoTaskInTime(0, main_auto_equip, item, eslot, previous_is_projectile) -- delay one frame if mastersim as mastersim unequip event is pushed before broken/out of ammo
     end
 end
 
@@ -448,14 +448,14 @@ local function initialize_inventory_and_equips(inst)
     --print_data(saved_equip_items)
 end
 
-local function ListenForEventsPlayer(inst)
+local function ListenForEventsPlayer_SS(inst)
     inst:ListenForEvent("itemget", InventoryOnItemGet)
     inst:ListenForEvent("itemlose", InventoryOnItemLose)
     inst:ListenForEvent("equip", OnEquip)
     inst:ListenForEvent("unequip", OnUnequip)
 end
 
-local function RemoveEventCallbacksPlayer(inst)
+local function RemoveEventCallbacksPlayer_SS(inst)
     inst:RemoveEventCallback("itemget", InventoryOnItemGet)
     inst:RemoveEventCallback("itemlose", InventoryOnItemLose)
     inst:RemoveEventCallback("equip", OnEquip)
@@ -464,7 +464,7 @@ end
 
 local function initialize_player_and_backpack(inst)
     initialize_inventory_and_equips(inst)
-    ListenForEventsPlayer(inst)
+    ListenForEventsPlayer_SS(inst)
     local backpack = inst.replica.inventory:GetOverflowContainer()
     if backpack ~= nil then
         saved_backpack_replica_container = backpack.inst.replica.container
@@ -474,12 +474,59 @@ local function initialize_player_and_backpack(inst)
 end
 
 AddComponentPostInit("playercontroller", function(self)
-    if self.inst ~= GLOBAL.ThePlayer then return end
-    self.inst:DoTaskInTime(0, initialize_player_and_backpack)
-
-    local old_OnRemoveFromEntity = self.OnRemoveFromEntity
-    self.OnRemoveFromEntity = function(self_local, ...)
-        RemoveEventCallbacksPlayer(self_local.inst)
-        return old_OnRemoveFromEntity(self_local, ...)
+    if self.inst ~= GLOBAL.ThePlayer then
+        return
     end
+    local old_OnRemoveFromEntity = self.OnRemoveFromEntity
+    if not self.ismastersim then
+        self.inst:DoTaskInTime(0, initialize_player_and_backpack)
+        self.OnRemoveFromEntity = function(self, ...)
+            RemoveEventCallbacksPlayer_SS(self.inst)
+            return old_OnRemoveFromEntity(self, ...)
+        end
+
+    else
+        self.inst:ListenForEvent("equip", OnEquip)
+        self.inst:ListenForEvent("unequip", OnUnequip)
+        self.OnRemoveFromEntity = function(self, ...)
+            self.inst:RemoveEventCallback("equip", OnEquip)
+            self.inst:RemoveEventCallback("unequip", OnUnequip)
+            return old_OnRemoveFromEntity(self, ...)
+        end
+
+    end
+end)
+
+AddComponentPostInit("inventory", function(self)
+    if not GLOBAL.TheWorld.ismastersim then
+        return
+    end
+	local old_Equip = self.Equip
+	self.Equip = function(self, item, old_to_active, ...)
+        if item == nil or item.components.equippable == nil or not item:IsValid() or item.components.equippable:IsRestricted(self.inst) or (self.noheavylifting and item:HasTag("heavy")) then
+            return old_Equip(self, item, old_to_active, ...)
+        end
+        local owner = item.components.inventoryitem.owner
+        local container = owner and owner.components.container
+
+        if owner ~= GLOBAL.ThePlayer and
+           container ~= GLOBAL.ThePlayer.components.inventory:GetOverflowContainer() then
+            return old_Equip(self, item, old_to_active, ...)
+        end
+        local prevslot = self:GetItemSlot(item)
+        local prevcontainer = nil
+        if prevslot == nil and container ~= nil then
+            prevslot = container:GetItemSlot(item)
+            prevcontainer = container
+        end
+
+        local eslot = item.components.equippable.equipslot
+        local olditem = self:GetEquippedItem(eslot)
+        if olditem ~= nil then
+            olditem.prevslot = prevslot
+            olditem.prevcontainer = prevcontainer
+        end
+
+		return old_Equip(self, item, old_to_active, ...)
+	end
 end)

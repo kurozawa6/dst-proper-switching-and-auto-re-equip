@@ -6,15 +6,13 @@ This client side mod works when joining other servers or hosting your own DST se
 Extra weapons will now also auto re-equip (or reload for projectiles) upon breaking/running out of ammo.
 
 Latest Patch Notes:
-+Slightly improved slot switching speed by removing initial frame delay
-+Fixed all known infinite periodic task bugs when switching and manipulating mouse-held equips while server is Paused
-+Fixed all known saved inventory desync bugs when managing inventory while server is Paused
++Now compatible with cave-less worlds & Don't Starve Alone mod
 ]]
 
 author = "Growth Mindset"
 forumthread = ""
 
-version = "1.2"
+version = "1.3"
 api_version = 10
 
 dont_starve_compatible = false
