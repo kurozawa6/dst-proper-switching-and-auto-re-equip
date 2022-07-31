@@ -6,13 +6,14 @@ This client side mod works when joining other servers or hosting your own DST se
 Extra weapons will now also auto re-equip (or reload for projectiles) upon breaking/running out of ammo.
 
 Latest Patch Notes:
-+Now compatible with cave-less worlds & Don't Starve Alone mod
+v1.3 : Now compatible with cave-less worlds & Don't Starve Alone mod
+v1.3a: Minor fix - equips on load are now initialized in cave-less & DSA.
 ]]
 
 author = "Growth Mindset"
 forumthread = ""
 
-version = "1.3"
+version = "1.3a"
 api_version = 10
 
 dont_starve_compatible = false

@@ -288,7 +288,7 @@ local function OnEquip(inst, data)
     if saved_equip_items[eslot] ~= nil then
         previous_equipped_item = saved_equip_items[eslot]
     end
-
+    saved_equip_items[eslot] = latest_equipped_item
     if eslot == GLOBAL.EQUIPSLOTS.HANDS then
         saved_handequip_is_projectile = latest_equipped_item:HasTag("projectile")
     end
@@ -316,13 +316,12 @@ local function OnEquip(inst, data)
             if saved_backpack_replica_container ~= nil then
                 RemoveEventCallbacksBackpack(saved_backpack_replica_container.inst)
             end
-            saved_backpack_replica_container = backpack.inst.replica.container
+            saved_backpack_replica_container = backpack
             initialize_backpack(saved_backpack_replica_container)
             ListenForEventsBackpack(saved_backpack_replica_container.inst)
         end
     end
 
-    saved_equip_items[eslot] = latest_equipped_item
     if removed_slot == nil then
         saved_replaced_item_per_eslot[eslot] = nil
         saved_removed_slot_per_eslot[eslot] = nil
@@ -448,6 +447,20 @@ local function initialize_inventory_and_equips(inst)
     --print_data(saved_equip_items)
 end
 
+local function mastersim_initialize_equips(inst)
+    local inventory_equips_preview = inst.components.inventory.equipslots
+
+    for eslot, item in pairs(inventory_equips_preview) do
+        saved_equip_items[eslot] = item
+    end
+
+    local handequip = saved_equip_items[GLOBAL.EQUIPSLOTS.HANDS]
+    if handequip ~= nil then
+        saved_handequip_is_projectile = handequip:HasTag("projectile")
+    end
+    --print_data(saved_equip_items)
+end
+
 local function ListenForEventsPlayer_SS(inst)
     inst:ListenForEvent("itemget", InventoryOnItemGet)
     inst:ListenForEvent("itemlose", InventoryOnItemLose)
@@ -467,7 +480,7 @@ local function initialize_player_and_backpack(inst)
     ListenForEventsPlayer_SS(inst)
     local backpack = inst.replica.inventory:GetOverflowContainer()
     if backpack ~= nil then
-        saved_backpack_replica_container = backpack.inst.replica.container
+        saved_backpack_replica_container = backpack
         initialize_backpack(saved_backpack_replica_container)
         ListenForEventsBackpack(saved_backpack_replica_container.inst)
     end
@@ -486,6 +499,8 @@ AddComponentPostInit("playercontroller", function(self)
         end
 
     else
+        --self.inst:DoTaskInTime(0, initialize_inventory_and_equips) -- yields a live preview and the equipped items instantly become nil when unequipped
+        self.inst:DoTaskInTime(0, mastersim_initialize_equips)
         self.inst:ListenForEvent("equip", OnEquip)
         self.inst:ListenForEvent("unequip", OnUnequip)
         self.OnRemoveFromEntity = function(self, ...)
