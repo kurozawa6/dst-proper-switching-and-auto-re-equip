@@ -293,56 +293,32 @@ local function next_same_prefab_item_from_tables(tables_to_check, item_to_compar
     return nil
 end
 
-local function item_exists_in_tables(tables_to_check, item_to_check)
-    for _, item_table in ipairs(tables_to_check) do
-        for _, item in pairs(item_table) do
-            if item == item_to_check then
-                return true
-            end
-        end
-    end
-    return false
-end
-
 local function get_entity_with_prefab_name_and_time(name, shottime)
     for _, v in pairs(GLOBAL.Ents) do
         if v.prefab == name then
-            if shottime - v.spawntime < 0.07 then
-                return v
+            if v.spawntime ~= nil then
+                if shottime - v.spawntime < 0.07 then
+                    return v
+                end
             end
         end
     end
     return nil
 end
 
-local function slingshot_auto_reload(inst, ammo)
+local function slingshot_auto_reload(inst, ammo) -- can't loop this due to quick equip-unequip bug
     local inventory = GLOBAL.ThePlayer.replica.inventory
     local ammo_slot = inst.replica.container
-    local previous_item_to_equip = nil
+    local tables_to_check = item_tables_to_check(GLOBAL.ThePlayer)
+    local item_to_equip = next_same_prefab_item_from_tables(tables_to_check, ammo)
 
-    local current_task = nil
-    local function autoreload_prompt()
-        if ammo_slot:GetItemInSlot(1) ~= nil then
-            cancel_task(current_task)
-            return
-        end
-        local tables_to_check = item_tables_to_check(GLOBAL.ThePlayer)
-        local item_to_equip = next_same_prefab_item_from_tables(tables_to_check, ammo)
-        if item_to_equip == nil then
-            cancel_task(current_task)
-        elseif item_to_equip == previous_item_to_equip then -- to prevent double equip bug
-            tables_to_check = item_tables_to_check(GLOBAL.ThePlayer)
-            if not item_exists_in_tables(tables_to_check, previous_item_to_equip) then
-                cancel_task(current_task)
-            end
-        elseif item_to_equip:IsValid() then
-            try_use_item_on_self(item_to_equip, inventory)
-            previous_item_to_equip = item_to_equip
-        end
+    if item_to_equip == nil or
+       ammo_slot:GetItemInSlot(1) ~= nil then
+        return
+    elseif not item_to_equip:IsValid() then
+        return
     end
-
-    autoreload_prompt()
-    current_task = inst:DoPeriodicTask(0, autoreload_prompt)
+    try_use_item_on_self(item_to_equip, inventory)
 end
 
 local function SlingshotOnItemGet(_, data)
