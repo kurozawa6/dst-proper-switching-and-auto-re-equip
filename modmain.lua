@@ -9,6 +9,9 @@ local saved_inventory_items = {}
 local saved_backpack_items = {}
 local saved_backpack_replica_container = nil
 local saved_handequip_is_projectile = false
+local saved_slingshot_item = nil
+local saved_slingshot_ammo = nil
+local GetTime = GLOBAL.GetTime
 
 local table = table --binding common/global utility stuff to locals for speed
 local type = type
@@ -25,7 +28,7 @@ end
 
 local function do_invntry_act_on_slot_or_item_w_dmmode_false(slot_or_item, inventory_or_backpack, ActionFn)
     local playercontroller = GLOBAL.ThePlayer.components.playercontroller
-    local playercontroller_deploy_mode = playercontroller.deploy_mode --to study
+    local playercontroller_deploy_mode = playercontroller.deploy_mode --to study, slingshot auto reload in client fails without this function
     playercontroller.deploy_mode = false
     ActionFn(inventory_or_backpack, slot_or_item)
     playercontroller.deploy_mode = playercontroller_deploy_mode
@@ -54,9 +57,8 @@ end
 local function cancel_task(task)
     if task ~= nil then
         task:Cancel()
-        --task = nil -- oopsie
         --print("A periodic task has been cancelled successfully.")
-    else
+    --else
         --print("A nil periodic task has been tried to cancel")
     end
 end
@@ -167,7 +169,7 @@ end
 
 local function update_inventory_on_get_fn_to_delay(inst, get_slot, get_item)
     local item_in_slot = inst.replica.inventory:GetItemInSlot(get_slot)
-    if item_in_slot == get_item then
+    if item_in_slot == get_item and get_slot ~= nil then
         saved_inventory_items[get_slot] = item_in_slot
         --print("saved_inventory_items[", get_slot, "]:", saved_inventory_items[get_slot])
     end
@@ -195,7 +197,7 @@ local function update_backpack_on_get_fn_to_delay(_, get_slot, get_item)
         return
     end
     local item_in_slot = saved_backpack_replica_container:GetItemInSlot(get_slot)
-    if item_in_slot == get_item then
+    if item_in_slot == get_item and get_slot ~= nil then
         saved_backpack_items[get_slot] = get_item
         --print("saved_backpack_items[", get_slot, "]:", saved_backpack_items[get_slot])
     end
@@ -220,7 +222,7 @@ end
 
 local function update_inventory_on_remove_fn_to_delay(inst, removed_slot)
     local item_in_slot = inst.replica.inventory:GetItemInSlot(removed_slot)
-    if item_in_slot == nil then
+    if item_in_slot == nil and removed_slot ~= nil then
         saved_inventory_items[removed_slot] = nil
         --print("saved_inventory_items[", removed_slot, "]:", saved_inventory_items[removed_slot])
     end
@@ -236,7 +238,7 @@ local function update_backpack_on_remove_fn_to_delay(_, removed_slot)
         return
     end
     local item_in_slot = saved_backpack_replica_container:GetItemInSlot(removed_slot)
-    if item_in_slot == nil then
+    if item_in_slot == nil and removed_slot ~= nil then
         saved_backpack_items[removed_slot] = nil
         --print("saved_backpack_items[", removed_slot, "]:", saved_backpack_items[removed_slot])
     end
@@ -247,19 +249,145 @@ local function BackpackOnItemLose(inst, data)
     inst:DoTaskInTime(0, update_backpack_on_remove_fn_to_delay, removed_slot)
 end
 
-local function initialize_backpack(backpack_replica_container)
-    saved_backpack_items = backpack_replica_container:GetItems()
-    --print_data(saved_backpack_items)
-end
-
-local function ListenForEventsBackpack(inst)
+local function BackpackListenForEvents(inst)
     inst:ListenForEvent("itemget", BackpackOnItemGet)
     inst:ListenForEvent("itemlose", BackpackOnItemLose)
 end
 
-local function RemoveEventCallbacksBackpack(inst)
+local function BackpackRemoveEventCallbacks(inst)
     inst:RemoveEventCallback("itemget", BackpackOnItemGet)
     inst:RemoveEventCallback("itemlose", BackpackOnItemLose)
+end
+
+local function item_tables_to_check(inst)
+    local inventory = inst.replica.inventory
+    local tables_to_check = {}
+    local active_item = inventory:GetActiveItem()
+    if active_item ~= nil then
+        table.insert(tables_to_check, {_ = active_item})
+    end
+    local inventory_items_table = inventory:GetItems()
+    if inventory_items_table ~= nil then
+        table.insert(tables_to_check, inventory_items_table)
+    end
+    local open_containers = inventory:GetOpenContainers()
+    if open_containers ~= nil then
+        for container_object in pairs(open_containers) do
+            local container_replica = container_object and container_object.replica.container
+            if container_replica ~= nil then
+                table.insert(tables_to_check, container_replica:GetItems())
+            end
+        end
+    end
+    return tables_to_check
+end
+
+local function next_same_prefab_item_from_tables(tables_to_check, item_to_compare)
+    for _, item_table in ipairs(tables_to_check) do
+        for _, item in pairs(item_table) do
+            if item.prefab == item_to_compare.prefab then
+                return item
+            end
+        end
+    end
+    return nil
+end
+
+local function item_exists_in_tables(tables_to_check, item_to_check)
+    for _, item_table in ipairs(tables_to_check) do
+        for _, item in pairs(item_table) do
+            if item == item_to_check then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+local function get_entity_with_prefab_name_and_time(name, shottime)
+    for _, v in pairs(GLOBAL.Ents) do
+        if v.prefab == name then
+            if shottime - v.spawntime < 0.07 then
+                return v
+            end
+        end
+    end
+    return nil
+end
+
+local function slingshot_auto_reload(inst, ammo)
+    local inventory = GLOBAL.ThePlayer.replica.inventory
+    local ammo_slot = inst.replica.container
+    local previous_item_to_equip = nil
+
+    local current_task = nil
+    local function autoreload_prompt()
+        if ammo_slot:GetItemInSlot(1) ~= nil then
+            cancel_task(current_task)
+            return
+        end
+        local tables_to_check = item_tables_to_check(GLOBAL.ThePlayer)
+        local item_to_equip = next_same_prefab_item_from_tables(tables_to_check, ammo)
+        if item_to_equip == nil then
+            cancel_task(current_task)
+        elseif item_to_equip == previous_item_to_equip then -- to prevent double equip bug
+            tables_to_check = item_tables_to_check(GLOBAL.ThePlayer)
+            if not item_exists_in_tables(tables_to_check, previous_item_to_equip) then
+                cancel_task(current_task)
+            end
+        elseif item_to_equip:IsValid() then
+            try_use_item_on_self(item_to_equip, inventory)
+            previous_item_to_equip = item_to_equip
+        end
+    end
+
+    autoreload_prompt()
+    current_task = inst:DoPeriodicTask(0, autoreload_prompt)
+end
+
+local function SlingshotOnItemGet(_, data)
+    if data.item == nil then
+        return
+    end
+    saved_slingshot_ammo = data.item
+end
+
+local function SlingshotOnItemLose(inst)
+    local current_time = GetTime()
+    local ammo = saved_slingshot_ammo
+    saved_slingshot_ammo = nil
+
+    if ammo == nil then
+        return
+    end
+    local item_prefab = ammo.prefab
+    local projectile_prefab = item_prefab.."_proj"
+    local ammo_projectile = get_entity_with_prefab_name_and_time(projectile_prefab, current_time)
+    if ammo_projectile ~= nil then
+        if not GLOBAL.TheWorld.ismastersim then
+            slingshot_auto_reload(inst, ammo)
+        else
+            inst:DoTaskInTime(0, slingshot_auto_reload, ammo) -- wait 1 frame to prevent invisible ammo icon bug
+        end
+    end
+end
+
+local function SlingshotListenForEvents(inst)
+    inst:ListenForEvent("itemget", SlingshotOnItemGet)
+    inst:ListenForEvent("itemlose", SlingshotOnItemLose)
+end
+
+local function SlingshotRemoveEventCallbacks(inst)
+    inst:RemoveEventCallback("itemget", SlingshotOnItemGet)
+    inst:RemoveEventCallback("itemlose", SlingshotOnItemLose)
+end
+
+local function initialize_backpack(backpack_replica_container)
+    local potentially_live_items_table = backpack_replica_container:GetItems()
+    for slot, item in pairs(potentially_live_items_table) do
+        saved_backpack_items[slot] = item
+    end
+    --print_data(saved_backpack_items)
 end
 
 local function onequip_auto_ss(inst, eslot, previous_equipped_item, destination_slot, destination_is_in_backpack)
@@ -289,18 +417,45 @@ local function OnEquip(inst, data)
         previous_equipped_item = saved_equip_items[eslot]
     end
     saved_equip_items[eslot] = latest_equipped_item
+    local saved_backpack_eslot = nil
+    if saved_backpack_replica_container ~= nil then
+        local backpack_equippable = saved_backpack_replica_container.inst.replica.equippable
+        saved_backpack_eslot = backpack_equippable and backpack_equippable:EquipSlot()
+    end
     if eslot == GLOBAL.EQUIPSLOTS.HANDS then
         saved_handequip_is_projectile = latest_equipped_item:HasTag("projectile")
+        if saved_slingshot_item ~= nil then
+            SlingshotRemoveEventCallbacks(saved_slingshot_item)
+            saved_slingshot_item = nil
+        end
+        if latest_equipped_item:HasTag("slingshot") then
+            saved_slingshot_item = latest_equipped_item
+            SlingshotListenForEvents(saved_slingshot_item)
+        end
+    elseif latest_equipped_item:HasTag("backpack") then
+        local backpack = latest_equipped_item.replica.container --or inst.replica.inventory:GetOverflowContainer()
+        if backpack ~= nil then
+            if saved_backpack_replica_container ~= nil then
+                BackpackRemoveEventCallbacks(saved_backpack_replica_container.inst)
+            end
+            saved_backpack_replica_container = backpack
+            initialize_backpack(saved_backpack_replica_container)
+            BackpackListenForEvents(saved_backpack_replica_container.inst)
+        end
+    elseif eslot == saved_backpack_eslot then
+        if saved_backpack_replica_container ~= nil then
+            saved_backpack_items = {}
+            BackpackRemoveEventCallbacks(saved_backpack_replica_container.inst)
+            saved_backpack_replica_container = nil
+        end
     end
 
     for slot, item in pairs(saved_inventory_items) do
-        --print(slot, item) --verbose, for debugging only
         if item == latest_equipped_item then -- if the latest equipped item is found on the previous saved inventory, then get its slot as destination slot
             removed_slot = slot
             break
         end
     end
-    --removed usage of next fn to check for empty tables because next doesn't exist in the modmain environment
     if removed_slot == nil then --and saved_backpack_items ~= nil then -- no need to check for saved_backpack_items being nil because it defaults to {}
         for slot, item in pairs(saved_backpack_items) do
             if item == latest_equipped_item then
@@ -308,17 +463,6 @@ local function OnEquip(inst, data)
                 is_from_backpack = true
                 break
             end
-        end
-    end
-    if latest_equipped_item:HasTag("backpack") then
-        local backpack = inst.replica.inventory:GetOverflowContainer()
-        if backpack ~= nil then
-            if saved_backpack_replica_container ~= nil then
-                RemoveEventCallbacksBackpack(saved_backpack_replica_container.inst)
-            end
-            saved_backpack_replica_container = backpack
-            initialize_backpack(saved_backpack_replica_container)
-            ListenForEventsBackpack(saved_backpack_replica_container.inst)
         end
     end
 
@@ -331,40 +475,6 @@ local function OnEquip(inst, data)
         saved_removed_slot_is_inbackpack_per_eslot[eslot] = is_from_backpack
         onequip_auto_ss(inst, eslot, previous_equipped_item, removed_slot, is_from_backpack)
     end
-end
-
-local function item_tables_to_check(inst)
-    local inventory = inst.replica.inventory
-    local tables_to_check = {}
-    local active_item = inventory:GetActiveItem()
-    if active_item ~= nil then
-        table.insert(tables_to_check, {_ = active_item})
-    end
-    local inventory_items_table = inventory:GetItems()
-    if inventory_items_table ~= nil then
-        table.insert(tables_to_check, inventory_items_table)
-    end
-    local open_containers = inventory:GetOpenContainers()
-    if open_containers ~= nil then
-        for container in pairs(open_containers) do
-            local container_replica = container and container.replica.container
-            if container_replica then
-                table.insert(tables_to_check, container_replica:GetItems())
-            end
-        end
-    end
-    return tables_to_check
-end
-
-local function next_same_prefab_item_from_tables(tables_to_check, item_to_compare)
-    for _, item_table in ipairs(tables_to_check) do
-        for _,item in pairs(item_table) do
-            if item.prefab == item_to_compare.prefab then
-                return item
-            end
-        end
-    end
-    return nil
 end
 
 local function main_auto_equip(inst, unequipped_item, eslot, previous_is_projectile)
@@ -404,12 +514,22 @@ local function main_auto_equip(inst, unequipped_item, eslot, previous_is_project
     current_task = inst:DoPeriodicTask(0, autoequip_prompt)
 end
 
+--[[ -- for when applying the "pure client" logic in cave-less/DSA mod is desired, followed by DoTaskInTime in OnUnequip (and commenting next line)
+local function update_on_unequip_fn_to_delay(inst, eslot)
+    local equip_in_eslot = inst.replica.inventory:GetEquippedItem(eslot)
+    if equip_in_eslot == nil and eslot ~= nil then
+        saved_equip_items[eslot] = nil
+        --print("saved_inventory_items[", removed_slot, "]:", saved_inventory_items[removed_slot])
+    end
+end
+]]
 local function OnUnequip(inst, data)
     if type(data) ~= "table" then
         return
     end
     local eslot = data.eslot
     local item = saved_equip_items[eslot]
+    --inst:DoTaskInTime(0, update_on_unequip_fn_to_delay)
     saved_equip_items[eslot] = nil
 
     if item == nil then
@@ -418,7 +538,7 @@ local function OnUnequip(inst, data)
     if item:HasTag("backpack") then
         saved_backpack_items = {}
         if saved_backpack_replica_container ~= nil then
-            RemoveEventCallbacksBackpack(saved_backpack_replica_container.inst)
+            BackpackRemoveEventCallbacks(saved_backpack_replica_container.inst)
             saved_backpack_replica_container = nil
         end
     end
@@ -433,57 +553,66 @@ local function OnUnequip(inst, data)
     else
         inst:DoTaskInTime(0, main_auto_equip, item, eslot, previous_is_projectile) -- delay one frame if mastersim as mastersim unequip event is pushed before broken/out of ammo
     end
+
+    if item:HasTag("slingshot") then --and saved_slingshot_item ~= nil
+        SlingshotRemoveEventCallbacks(item)
+        saved_slingshot_item = nil
+    end
 end
 
-local function initialize_inventory_and_equips(inst)
+local function initialize_inventory(inst)
     local inventory = inst.replica.inventory
-    saved_inventory_items = inventory:GetItems()
-    saved_equip_items = inventory:GetEquips()
-    local handequip = saved_equip_items[GLOBAL.EQUIPSLOTS.HANDS]
-    if handequip ~= nil then
-        saved_handequip_is_projectile = handequip:HasTag("projectile")
+    local potentially_live_items_table = inventory:GetItems()
+    for slot, item in pairs(potentially_live_items_table) do
+        saved_inventory_items[slot] = item
     end
     --print_data(saved_inventory_items)
-    --print_data(saved_equip_items)
 end
 
-local function mastersim_initialize_equips(inst)
-    local inventory_equips_preview = inst.components.inventory.equipslots
-
-    for eslot, item in pairs(inventory_equips_preview) do
+local function initialize_equips(inst)
+    local inventory = inst.replica.inventory
+    local potentially_live_equips_table = inventory:GetEquips()
+    for eslot, item in pairs(potentially_live_equips_table) do
         saved_equip_items[eslot] = item
     end
-
     local handequip = saved_equip_items[GLOBAL.EQUIPSLOTS.HANDS]
     if handequip ~= nil then
         saved_handequip_is_projectile = handequip:HasTag("projectile")
+        if handequip:HasTag("slingshot") then
+            saved_slingshot_item = handequip
+            SlingshotRemoveEventCallbacks(handequip)
+            SlingshotListenForEvents(handequip)
+            saved_slingshot_ammo = saved_slingshot_item.replica.container:GetItemInSlot(1)
+        end
     end
     --print_data(saved_equip_items)
 end
 
-local function ListenForEventsPlayer_SS(inst)
+local function ClientListenForEvents(inst)
     inst:ListenForEvent("itemget", InventoryOnItemGet)
     inst:ListenForEvent("itemlose", InventoryOnItemLose)
     inst:ListenForEvent("equip", OnEquip)
     inst:ListenForEvent("unequip", OnUnequip)
 end
 
-local function RemoveEventCallbacksPlayer_SS(inst)
+local function ClientRemoveEventCallbacks(inst)
     inst:RemoveEventCallback("itemget", InventoryOnItemGet)
     inst:RemoveEventCallback("itemlose", InventoryOnItemLose)
     inst:RemoveEventCallback("equip", OnEquip)
     inst:RemoveEventCallback("unequip", OnUnequip)
 end
 
-local function initialize_player_and_backpack(inst)
-    initialize_inventory_and_equips(inst)
-    ListenForEventsPlayer_SS(inst)
+local function initialize_client(inst)
+    initialize_inventory(inst)
+    initialize_equips(inst)
     local backpack = inst.replica.inventory:GetOverflowContainer()
     if backpack ~= nil then
         saved_backpack_replica_container = backpack
         initialize_backpack(saved_backpack_replica_container)
-        ListenForEventsBackpack(saved_backpack_replica_container.inst)
+        BackpackRemoveEventCallbacks(saved_backpack_replica_container.inst)
+        BackpackListenForEvents(saved_backpack_replica_container.inst)
     end
+    ClientListenForEvents(inst)
 end
 
 AddComponentPostInit("playercontroller", function(self)
@@ -492,15 +621,14 @@ AddComponentPostInit("playercontroller", function(self)
     end
     local old_OnRemoveFromEntity = self.OnRemoveFromEntity
     if not self.ismastersim then
-        self.inst:DoTaskInTime(0, initialize_player_and_backpack)
+        self.inst:DoTaskInTime(0, initialize_client)
         self.OnRemoveFromEntity = function(self, ...)
-            RemoveEventCallbacksPlayer_SS(self.inst)
+            ClientRemoveEventCallbacks(self.inst)
             return old_OnRemoveFromEntity(self, ...)
         end
 
     else
-        --self.inst:DoTaskInTime(0, initialize_inventory_and_equips) -- yields a live preview and the equipped items instantly become nil when unequipped
-        self.inst:DoTaskInTime(0, mastersim_initialize_equips)
+        self.inst:DoTaskInTime(0, initialize_equips)
         self.inst:ListenForEvent("equip", OnEquip)
         self.inst:ListenForEvent("unequip", OnUnequip)
         self.OnRemoveFromEntity = function(self, ...)
