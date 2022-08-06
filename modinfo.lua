@@ -6,6 +6,7 @@ This client side mod works when joining other servers or hosting your own DST se
 Extra weapons will now also auto re-equip (or reload for projectiles) upon breaking/running out of ammo.
 
 Latest Patch Notes:
+v1.4a: Auto re-equip now reliably searches inventory from left to right.
 v1.4 : Slingshot now auto-reloads, code refactor, more safeties from crash
 v1.3 : Now compatible with cave-less worlds & Don't Starve Alone mod
 ]]
@@ -13,7 +14,7 @@ v1.3 : Now compatible with cave-less worlds & Don't Starve Alone mod
 author = "Growth Mindset"
 forumthread = ""
 
-version = "1.4"
+version = "1.4a"
 api_version = 10
 
 dont_starve_compatible = false

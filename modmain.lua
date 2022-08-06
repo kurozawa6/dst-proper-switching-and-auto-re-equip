@@ -21,6 +21,10 @@ local pairs = pairs
 local ipairs = ipairs
 
 local function print_data(data) --for debugging
+    if type(data) ~= "table" then
+        print(data, "is not a table.")
+        return
+    end
     for k, v in pairs(data) do
         print(k, v)
     end
@@ -183,7 +187,6 @@ local function onitemget_auto_ss(inst, eslot, obtained_item, slot_to_take_from, 
         return
     end
 
-    --print("initializing onitemget_auto_ss [ASSRE]")
     local destination_slot = saved_removed_slot_per_eslot[eslot]
     --print("Move", obtained_item, "from", slot_to_take_from, "to", destination_slot)
     local destination_is_in_backpack = saved_removed_slot_is_inbackpack_per_eslot[eslot]
@@ -191,11 +194,13 @@ local function onitemget_auto_ss(inst, eslot, obtained_item, slot_to_take_from, 
     auto_switch_slot(inst, obtained_item, slot_to_take_from, destination_slot, obtained_is_in_backpack, destination_is_in_backpack)
 end
 
+--Delayed update functions are delayed by a frame so that the "onequip" function can use the shared tables before they get updated.
+--The saved inventory table is checked before committing the change to prevent desyncs when moving items around while the game is paused.
+
 local function update_inventory_on_get_fn_to_delay(inst, get_slot, get_item)
     local item_in_slot = inst.replica.inventory:GetItemInSlot(get_slot)
     if item_in_slot == get_item and get_slot ~= nil then
         saved_inventory_items[get_slot] = item_in_slot
-        --print("saved_inventory_items[", get_slot, "]:", saved_inventory_items[get_slot])
     end
 end
 
@@ -223,7 +228,6 @@ local function update_backpack_on_get_fn_to_delay(_, get_slot, get_item)
     local item_in_slot = saved_backpack_replica_container:GetItemInSlot(get_slot)
     if item_in_slot == get_item and get_slot ~= nil then
         saved_backpack_items[get_slot] = get_item
-        --print("saved_backpack_items[", get_slot, "]:", saved_backpack_items[get_slot])
     end
 end
 
@@ -248,11 +252,10 @@ local function update_inventory_on_remove_fn_to_delay(inst, removed_slot)
     local item_in_slot = inst.replica.inventory:GetItemInSlot(removed_slot)
     if item_in_slot == nil and removed_slot ~= nil then
         saved_inventory_items[removed_slot] = nil
-        --print("saved_inventory_items[", removed_slot, "]:", saved_inventory_items[removed_slot])
     end
 end
 
-local function InventoryOnItemLose(inst, data) -- Huge mistake on hindsight: "IMPORTANT EVENT FUNCTION THAT IS CALLED ONLY WHEN NEEDED! USE THIS!"
+local function InventoryOnItemLose(inst, data)
     local removed_slot = data.slot
     inst:DoTaskInTime(0, update_inventory_on_remove_fn_to_delay, removed_slot)
 end
@@ -264,7 +267,6 @@ local function update_backpack_on_remove_fn_to_delay(_, removed_slot)
     local item_in_slot = saved_backpack_replica_container:GetItemInSlot(removed_slot)
     if item_in_slot == nil and removed_slot ~= nil then
         saved_backpack_items[removed_slot] = nil
-        --print("saved_backpack_items[", removed_slot, "]:", saved_backpack_items[removed_slot])
     end
 end
 
@@ -283,7 +285,7 @@ local function BackpackRemoveEventCallbacks(inst)
     inst:RemoveEventCallback("itemlose", BackpackOnItemLose)
 end
 
-local function item_tables_to_check(inst)
+local function item_tables_to_check(inst) --used for weapons auto re-equip and slingshot auto-reload
     local inventory = inst.replica.inventory
     local tables_to_check = {}
     local active_item = inventory:GetActiveItem()
@@ -326,7 +328,7 @@ local function next_same_prefab_item_from_tables(tables_to_check, item_to_compar
     return nil
 end
 
-local function get_entity_with_prefab_name_and_spawntime(name, time)
+local function get_entity_with_prefab_name_and_spawntime(name, time) --used to confirm existence of spawned projectile when firing slingshot
     for _, v in pairs(GLOBAL.Ents) do
         if v.prefab == name then
             if v.spawntime ~= nil then
@@ -431,7 +433,7 @@ local function OnEquip(inst, data)
         local backpack_equippable = saved_backpack_replica_container.inst.replica.equippable
         saved_backpack_eslot = backpack_equippable and backpack_equippable:EquipSlot()
     end
-    if eslot == GLOBAL.EQUIPSLOTS.HANDS then
+    if eslot == GLOBAL.EQUIPSLOTS.HANDS then --slingshot and backpack events are listened for or "reset" when equipping/replacing them
         saved_handequip_is_projectile = latest_equipped_item:HasTag("projectile")
         if saved_slingshot_item ~= nil then
             SlingshotRemoveEventCallbacks(saved_slingshot_item)
@@ -661,7 +663,7 @@ AddComponentPostInit("inventory", function(self) --for hosting cave-less worlds 
         local owner = item.components.inventoryitem.owner
         local container = owner and owner.components.container
 
-        if owner ~= GLOBAL.ThePlayer and
+        if owner ~= GLOBAL.ThePlayer and --Inventory:Equip patch modification fires only when the item to equip is already held by ThePlayer
            container ~= GLOBAL.ThePlayer.components.inventory:GetOverflowContainer() then
             return old_Equip(self, item, old_to_active, ...)
         end
