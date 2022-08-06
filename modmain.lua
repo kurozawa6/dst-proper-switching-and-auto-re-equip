@@ -288,18 +288,27 @@ local function item_tables_to_check(inst)
     local tables_to_check = {}
     local active_item = inventory:GetActiveItem()
     if active_item ~= nil then
-        table.insert(tables_to_check, {_ = active_item})
+        table.insert(tables_to_check, {active_item})
     end
-    local inventory_items_table = inventory:GetItems()
-    if inventory_items_table ~= nil then
-        table.insert(tables_to_check, inventory_items_table)
+    local inventory_items_table = {}
+    local inventory_numslots = inventory:GetNumSlots()
+    for slot = 1, inventory_numslots do
+        local item = inventory:GetItemInSlot(slot)
+        inventory_items_table[slot] = item~=nil and item or {}
     end
+    table.insert(tables_to_check, inventory_items_table)
     local open_containers = inventory:GetOpenContainers()
     if open_containers ~= nil then
         for container_object in pairs(open_containers) do
             local container_replica = container_object and container_object.replica.container
             if container_replica ~= nil then
-                table.insert(tables_to_check, container_replica:GetItems())
+                local container_items_table = {}
+                local container_numslots = container_replica:GetNumSlots()
+                for slot = 1, container_numslots do
+                    local item = container_replica:GetItemInSlot(slot)
+                    container_items_table[slot] = item~=nil and item or {}
+                end
+                table.insert(tables_to_check, container_items_table)
             end
         end
     end
@@ -308,7 +317,7 @@ end
 
 local function next_same_prefab_item_from_tables(tables_to_check, item_to_compare)
     for _, item_table in ipairs(tables_to_check) do
-        for _, item in pairs(item_table) do
+        for _, item in ipairs(item_table) do
             if item.prefab == item_to_compare.prefab then
                 return item
             end
