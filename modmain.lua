@@ -63,6 +63,30 @@ local function cancel_task(task)
     end
 end
 
+--[[
+Gist of auto switch slot logic:
+When equipping an item to replace another equipped, "equip" and "itemget" events are pushed client side.
+To be able to move the item to the correct slot, we mainly need the item to move, its origin slot, and its destination slot.
+The "itemget" event gives us the item to move and its origin slot. But "equip" only gives us the eslot and
+the latest equipped item. We'll use the previous saved inventory state and some other tables with eslot as the indexing
+to figure out, from "equip", what the destination slot is as well as to confirm that all conditions are met. The "itemremove"
+could also give us the destination slot but it's not pushed in some circumstance, so we just use it mainly for updating the
+previous saved inventory state.
+
+Another problem is the receiving order of "equip" and "itemget" events upon equip switching is random. This could be solved
+by inducing a frame delay for either event's function. So that we are certain the other event function would fire last, after
+all the information needed are updated. But now I'm using a trickier one that doesn't have any induced frame delay - I sort of
+mirrored the autoswitch checker function. So now the autoswitch works regardless of whether "equip" or "itemget" is pushed first.
+I also made sure that it only works once per proper scenario. Should it unexpectedly fire in other unforeseen circumstances,
+there are other checks to keep it from moving items around unnecessarily.
+
+For when the client is also the server (hosting cave-less or DSA mod), the pushed events per equip switch are different.
+The order isn't random and there are a couple more events. Overall, they are "unequip", "itemremove", "itemget", and then
+"equip". The same client side logic will work provided I induce a frame delay for unequip (so "equip" function can fire first
+before the needed shared tables are updated by the "unequip" fn). But instead I used a different logic, which you can see
+around at the bottom of this file.
+]]
+
 local function auto_switch_slot(inst, obtained_item, slot_to_take_from, destination_slot, obtained_is_in_backpack, destination_is_in_backpack)
     local active_item = nil
     local inventory_destination = nil
@@ -293,11 +317,11 @@ local function next_same_prefab_item_from_tables(tables_to_check, item_to_compar
     return nil
 end
 
-local function get_entity_with_prefab_name_and_time(name, shottime)
+local function get_entity_with_prefab_name_and_spawntime(name, time)
     for _, v in pairs(GLOBAL.Ents) do
         if v.prefab == name then
             if v.spawntime ~= nil then
-                if shottime - v.spawntime < 0.07 then
+                if time - v.spawntime < 0.07 then
                     return v
                 end
             end
@@ -338,7 +362,7 @@ local function SlingshotOnItemLose(inst)
     end
     local item_prefab = ammo.prefab
     local projectile_prefab = item_prefab.."_proj"
-    local ammo_projectile = get_entity_with_prefab_name_and_time(projectile_prefab, current_time)
+    local ammo_projectile = get_entity_with_prefab_name_and_spawntime(projectile_prefab, current_time)
     if ammo_projectile ~= nil then
         if not GLOBAL.TheWorld.ismastersim then
             slingshot_auto_reload(inst, ammo)
@@ -368,7 +392,7 @@ end
 
 local function onequip_auto_ss(inst, eslot, previous_equipped_item, destination_slot, destination_is_in_backpack)
     local obtained_item = saved_get_item_per_eslot[eslot]
-
+    --print(obtained_item, previous_equipped_item)
     if not (previous_equipped_item == obtained_item and previous_equipped_item and obtained_item) then
         return
     end
@@ -442,7 +466,7 @@ local function OnEquip(inst, data)
         end
     end
 
-    if removed_slot == nil then
+    if removed_slot == nil or previous_equipped_item == nil then
         saved_replaced_item_per_eslot[eslot] = nil
         saved_removed_slot_per_eslot[eslot] = nil
     else
@@ -604,7 +628,7 @@ AddComponentPostInit("playercontroller", function(self)
         end
 
     else
-        self.inst:DoTaskInTime(0, initialize_equips)
+        self.inst:DoTaskInTime(0, initialize_equips) -- may also use same client side logic with unequip update delayed, but below ComponentPostInit is better
         self.inst:ListenForEvent("equip", OnEquip)
         self.inst:ListenForEvent("unequip", OnUnequip)
         self.OnRemoveFromEntity = function(self, ...)
@@ -616,7 +640,7 @@ AddComponentPostInit("playercontroller", function(self)
     end
 end)
 
-AddComponentPostInit("inventory", function(self)
+AddComponentPostInit("inventory", function(self) --for hosting cave-less worlds without affecting other players, or Don't Starve Alone mod
     if not GLOBAL.TheWorld.ismastersim then
         return
     end
