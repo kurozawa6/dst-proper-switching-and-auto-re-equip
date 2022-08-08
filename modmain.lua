@@ -1,3 +1,14 @@
+--[[
+	If any Klei dev finds themselves snooping around in this code, I'm moderately certain that you can completely replicate this mod by putting the following 5 lines of code at line 993 in the inventory component! Thx, luv ya!
+
+                if (item.prevcontainer==nil and self:GetItemInSlot(item.prevslot)==nil) or
+                   (item.prevcontainer==self:GetOverflowContainer() and item.prevcontainer:GetItemInSlot(item.prevslot)==nil) then
+                    olditem.prevslot = item.prevslot
+                    olditem.prevcontainer = item.prevcontainer
+                end
+            
+]] --Fidooop, 2017, edited accordingly
+
 local saved_equip_items = {}
 local saved_replaced_item_per_eslot = {}
 local saved_removed_slot_per_eslot = {}
@@ -676,9 +687,15 @@ AddComponentPostInit("inventory", function(self) --for hosting cave-less worlds 
 
         local eslot = item.components.equippable.equipslot
         local olditem = self:GetEquippedItem(eslot)
-        if olditem ~= nil then
-            olditem.prevslot = prevslot
-            olditem.prevcontainer = prevcontainer
+        local leftovers_condition = item.components.stackable ~= nil and item.components.stackable:IsStack() and not item.components.equippable.equipstack
+        --checking mid-Equip if prevslot is occupied is better, but impossible via function patching
+
+        if olditem ~= nil and not leftovers_condition and not old_to_active then
+            local cant_hold_olditem = olditem.components.inventoryitem~=nil and not olditem.components.inventoryitem.cangoincontainer and not self.ignorescangoincontainer
+            if not cant_hold_olditem then
+                olditem.prevslot = prevslot
+                olditem.prevcontainer = prevcontainer
+            end
         end
 
 		return old_Equip(self, item, old_to_active, ...)
