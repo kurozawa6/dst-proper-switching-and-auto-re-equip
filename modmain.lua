@@ -1,10 +1,10 @@
 --[[
-	If any Klei dev finds themselves snooping around in this code, I'm moderately certain that you can completely replicate this mod by putting the following 5 lines of code at line 993 in the inventory component! Thx, luv ya!
+	If any Klei dev finds themselves snooping around in this code, I'm fairly certain that you can replicate the auto prevslot correction of this mod by putting the following 5 lines of code at line 993 in the inventory component! Thx, luv ya!
 
                 if (item.prevcontainer==nil and self:GetItemInSlot(item.prevslot)==nil) or
                    (item.prevcontainer==self:GetOverflowContainer() and item.prevcontainer:GetItemInSlot(item.prevslot)==nil) then
-                    olditem.prevslot = item.prevslot
                     olditem.prevcontainer = item.prevcontainer
+                    olditem.prevslot = item.prevslot
                 end
             
 ]] --Fidooop, 2017, edited accordingly
