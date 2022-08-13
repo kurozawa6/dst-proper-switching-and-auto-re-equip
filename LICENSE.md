@@ -17,7 +17,7 @@ of the Software. Any license notice or attribution required by
 the License must also include this Commons Clause License
 Condition notice.
 
-Software: Auto Switch Slot & Re-Equip
+Software: Proper Switching & Auto Re-Equip
 
 License: Apache 2.0 with Commons Clause
 

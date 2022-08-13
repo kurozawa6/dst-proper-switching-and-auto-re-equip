@@ -11,7 +11,7 @@ v1.4 : Slingshot now auto-reloads +safeties from crash
 author = "Growth Mindset"
 forumthread = ""
 
-version = "1.5"
+version = "1.5a"
 api_version = 10
 
 dont_starve_compatible = false
