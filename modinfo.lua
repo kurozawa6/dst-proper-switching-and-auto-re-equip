@@ -1,21 +1,17 @@
-name = "Auto Switch Slot & Re-Equip Client Mod"
+name = "Proper Switching & Auto Re-Equip Client Mod"
 description =
 [[
-This client side mod works when joining other servers or hosting your own DST server with caves. Equipping another item from your inventory or backpack via keyboard shortcuts/right clicks will now automatically switch its "saved slot" with the one you were previously wearing.
-
-Extra weapons will now also auto re-equip (or reload for projectiles) upon breaking/running out of ammo.
+This client mod works when joining other servers or hosting your own DST server with caves. It automatically does two things: re-equipping extra weapons when broken/out of ammo and correcting equipped prevslots when needed. For more info, you may check the Steam Workshop page.
 
 Latest Patch Notes:
-v1.4b: Added notes for Klei +autoss checks
-v1.4a: Auto re-equip now searches from left to right.
+v1.5 : Updated mod name+description & notes for Klei
 v1.4 : Slingshot now auto-reloads +safeties from crash
-v1.3 : Now compatible with cave-less & DSA mod
 ]]
 
 author = "Growth Mindset"
 forumthread = ""
 
-version = "1.4b"
+version = "1.5"
 api_version = 10
 
 dont_starve_compatible = false
